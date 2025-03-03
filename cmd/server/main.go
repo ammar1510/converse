@@ -46,11 +46,11 @@ func main() {
 		dbName := os.Getenv("DB_NAME")
 		dbUser := os.Getenv("DB_USER")
 		dbPass := os.Getenv("DB_PASSWORD")
-		
+
 		if dbHost == "" || dbName == "" || dbUser == "" {
 			log.Fatal("Database connection details missing. Set DATABASE_URL or individual DB_* variables")
 		}
-		
+
 		// Build connection string
 		dbURL = "postgres://" + dbUser
 		if dbPass != "" {
@@ -86,17 +86,25 @@ func main() {
 
 	// Create API handlers
 	authHandler := api.NewAuthHandler(db)
+	messageHandler := api.NewMessageHandler(db)
 
 	// Set up API routes
 	// Public routes (no authentication required)
 	router.POST("/api/register", authHandler.Register)
 	router.POST("/api/login", authHandler.Login)
-	
+
 	// Protected routes (authentication required)
 	authorized := router.Group("/api")
 	authorized.Use(api.AuthMiddleware())
 	{
 		authorized.GET("/me", authHandler.GetMe)
+
+		// Message routes
+		authorized.POST("/messages", messageHandler.SendMessage)
+		authorized.GET("/messages", messageHandler.GetMessages)
+		authorized.GET("/messages/conversation/:userID", messageHandler.GetConversation)
+		authorized.PUT("/messages/:messageID/read", messageHandler.MarkMessageAsRead)
+
 		// More protected routes can be added here
 	}
 
@@ -139,4 +147,4 @@ func main() {
 	}
 
 	log.Println("Server exited properly")
-} 
+}
