@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,7 +96,49 @@ func (db *DB) GetUserByEmail(email string) (*models.User, error) {
 
 // UpdateLastSeen updates the user's last_seen timestamp
 func (db *DB) UpdateLastSeen(userID uuid.UUID) error {
-	_, err := db.Exec("UPDATE users SET last_seen = $1 WHERE id = $2", 
+	result, err := db.Exec("UPDATE users SET last_seen = $1 WHERE id = $2", 
 		time.Now(), userID)
-	return err
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	
+	return nil
+}
+
+// GetUserByID retrieves a user by their ID
+func (db *DB) GetUserByID(id uuid.UUID) (*models.User, error) {
+	var user models.User
+	err := db.QueryRow(`
+		SELECT id, username, email, password_hash, 
+		       COALESCE(display_name, ''), COALESCE(avatar_url, ''), 
+		       created_at, last_seen 
+		FROM users WHERE id = $1`,
+		id).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.PasswordHash,
+		&user.DisplayName,
+		&user.AvatarURL,
+		&user.CreatedAt,
+		&user.LastSeen,
+	)
+	
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	
+	return &user, nil
 } 

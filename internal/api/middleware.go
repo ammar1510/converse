@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ammar1510/converse/internal/auth"
-	"github.com/ammar1510/converse/internal/models"
 )
 
 // AuthMiddleware validates JWT tokens and sets user info in context

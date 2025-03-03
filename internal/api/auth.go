@@ -2,9 +2,9 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/ammar1510/converse/internal/auth"
 	"github.com/ammar1510/converse/internal/database"
@@ -124,10 +124,27 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 	
-	// Get user from database - implement GetUserByID in database package
-	// user, err := h.DB.GetUserByID(userID.(uuid.UUID))
-	// ...
+	// Convert string to UUID
+	userUUID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
+		return
+	}
 	
-	// For now, just return placeholder
-	c.JSON(http.StatusOK, gin.H{"message": "User profile for " + userID.(string)})
+	// Get user from database
+	user, err := h.DB.GetUserByID(userUUID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve user"})
+		return
+	}
+	
+	// Return user data
+	c.JSON(http.StatusOK, models.UserResponse{
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		AvatarURL:   user.AvatarURL,
+		CreatedAt:   user.CreatedAt,
+	})
 } 

@@ -14,12 +14,17 @@ converse/
 ├── internal/
 │   ├── api/
 │   │   ├── auth.go              # Authentication API handlers
-│   │   └── middleware.go        # API middleware (JWT auth)
+│   │   ├── auth_test.go         # Tests for auth handlers
+│   │   ├── middleware.go        # API middleware (JWT auth)
+│   │   └── middleware_test.go   # Tests for auth middleware
 │   ├── auth/
 │   │   ├── jwt.go               # JWT token handling
-│   │   └── password.go          # Password hashing utilities
+│   │   ├── jwt_test.go          # Tests for JWT functionality
+│   │   ├── password.go          # Password hashing utilities
+│   │   └── password_test.go     # Tests for password functions
 │   ├── database/
-│   │   └── supabase.go          # Database connection and operations
+│   │   ├── supabase.go          # Database connection and operations
+│   │   └── supabase_test.go     # Tests for database operations
 │   └── models/
 │       └── user.go              # Data models and validation
 └── .env                         # Environment configuration
@@ -58,6 +63,22 @@ Implements authentication-related API endpoints.
   - Gets user ID from JWT context
   - Returns user profile data
 
+### auth_test.go
+Comprehensive tests for authentication endpoints.
+
+- **`TestRegister`**: Tests user registration with various scenarios
+  - Valid registration
+  - Duplicate email/username
+  - Invalid input validation
+- **`TestLogin`**: Tests login functionality
+  - Valid credentials
+  - Invalid password
+  - Non-existent user
+  - Invalid input
+- **`TestGetMe`**: Tests profile retrieval
+  - Valid token
+  - Missing/invalid token
+
 ### middleware.go
 Provides middleware for request preprocessing.
 
@@ -66,6 +87,15 @@ Provides middleware for request preprocessing.
   - Validates token authenticity
   - Sets user ID and username in request context
   - Aborts with 401 if token is invalid
+
+### middleware_test.go
+Tests for authentication middleware.
+
+- **`TestAuthMiddleware`**: Tests JWT validation
+  - Valid token processing
+  - Missing token
+  - Invalid token format
+  - Missing Bearer prefix
 
 ## Package: internal/auth
 
@@ -81,13 +111,45 @@ Handles JWT token generation and validation.
   - Parses and validates token
   - Returns extracted claims or error
 - **`GetUserIDFromToken(claims *JWTClaims)`**: Extracts UUID from token claims
-- **`InitJWTKey(key []byte)`**: Sets the JWT secret key (to be implemented)
+- **`InitJWTKey(key []byte)`**: Sets the JWT secret key for testing and initialization
+
+### jwt_test.go
+Tests for JWT functionality.
+
+- **`TestInitJWTKey`**: Tests JWT key initialization
+- **`TestGenerateToken`**: Tests token generation
+  - Valid user
+  - Missing user ID
+  - Nil user
+- **`TestValidateToken`**: Tests token validation
+  - Valid token
+  - Empty token
+  - Invalid format
+  - Tampered token
+- **`TestGetUserIDFromToken`**: Tests user ID extraction
+  - Valid claims
+  - Invalid UUID format
+  - Nil claims
 
 ### password.go
 Provides password security utilities.
 
 - **`HashPassword(password string)`**: Securely hashes passwords using bcrypt
 - **`CheckPasswordHash(password, hash string)`**: Verifies password against stored hash
+
+### password_test.go
+Tests for password functionality.
+
+- **`TestPasswordHashing`**: Tests password hashing
+  - Common passwords
+  - Empty passwords
+  - Long passwords
+  - Special characters
+- **`TestCheckPasswordHash`**: Tests password verification
+  - Correct password
+  - Incorrect password
+  - Empty password
+  - Invalid hash
 
 ## Package: internal/database
 
@@ -104,6 +166,23 @@ Manages database connectivity and operations.
   - Queries database for matching email
   - Returns user object or not found error
 - **`UpdateLastSeen(userID uuid.UUID)`**: Updates user's last activity timestamp
+
+### supabase_test.go
+Tests for database operations.
+
+- **`TestNewDB`**: Tests database connection
+  - Valid connection string
+  - Invalid connection string
+- **`TestCreateUser`**: Tests user creation
+  - Valid user
+  - Duplicate email
+  - Duplicate username
+- **`TestGetUserByEmail`**: Tests user retrieval
+  - Existing user
+  - Non-existent user
+- **`TestUpdateLastSeen`**: Tests last seen update
+  - Existing user
+  - Non-existent user
 
 ## Package: internal/models
 
@@ -130,8 +209,53 @@ Environment configuration file.
 - **PORT**: Port for HTTP server (default 8080)
 - **ENV**: Application environment (development, production)
 
-## Planned Features (Not Yet Implemented)
+## Testing Status
 
+### Test Results Summary
+1. **API Package Tests** (`internal/api/`)
+   - ✅ `TestRegister`: All cases pass
+     - Valid registration
+     - Duplicate email handling
+     - Input validation
+   - ✅ `TestLogin`: All cases pass
+     - Valid credentials
+     - Invalid password
+     - Non-existent user
+     - Input validation
+   - ✅ `TestAuthMiddleware`: All cases pass
+     - Valid token
+     - Missing token
+     - Invalid format
+     - Missing Bearer prefix
+   - ⚠️ `TestGetMe`: Partially implemented
+     - User profile retrieval needs database integration
+
+2. **Database Package Tests** (`internal/database/`)
+   - ✅ `TestNewDB`: Connection handling
+   - ✅ `TestCreateUser`: User creation and validation
+   - ✅ `TestGetUserByEmail`: User retrieval
+   - ✅ `TestUpdateLastSeen`: Last activity tracking
+   - ✅ `TestGetUserByID`: User lookup by UUID
+
+3. **Auth Package Tests** (`internal/auth/`)
+   - ✅ `TestPasswordHashing`: Password security
+   - ✅ `TestCheckPasswordHash`: Hash verification
+   - ✅ `TestGenerateToken`: JWT generation
+   - ✅ `TestValidateToken`: JWT validation
+   - ✅ `TestInitJWTKey`: JWT key management
+
+### Environment Requirements
+- PostgreSQL database with user-specific credentials
+- Environment variables properly configured
+- JWT secret key initialized
+
+### Known Issues
+1. Database tests require specific user configuration:
+   - Using system username instead of 'postgres'
+   - Proper database permissions
+   - Test database (`converse_test`) created
+
+### Planned Features (Not Yet Implemented)
 1. **WebSocket Handler**: For real-time chat communication
 2. **Redis Integration**: For user presence and temporary data
 3. **Chat Models and Operations**: For message persistence
