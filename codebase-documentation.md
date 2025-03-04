@@ -266,3 +266,241 @@ Environment configuration file.
 1. **Registration**: Client sends username, email, password → Server creates user → Returns user data
 2. **Login**: Client sends email, password → Server verifies → Returns JWT token and user data
 3. **Authenticated Requests**: Client includes JWT in Authorization header → Middleware validates → Handler processes request 
+
+## UI Implementation Plan
+
+### Updated Minimal Implementation Approach
+
+Based on development progress and prioritization, we've adopted a more focused, minimal implementation strategy to quickly get essential features working before expanding the UI.
+
+#### Minimal Project Structure
+```
+converse-ui/
+├── public/
+│   ├── index.html
+│   └── assets/
+├── src/
+│   ├── components/
+│   │   ├── auth/                # Authentication components (priority)
+│   │   │   ├── LoginForm.jsx
+│   │   │   └── RegisterForm.jsx
+│   │   ├── chat/                # Essential messaging components
+│   │   │   ├── MessageList.jsx  # Display messages
+│   │   │   └── MessageInput.jsx # Send messages
+│   │   └── layout/              # Minimal layout
+│   │       └── Navbar.jsx       # Simple navigation
+│   ├── pages/                   # Core pages only
+│   │   ├── LoginPage.jsx
+│   │   ├── RegisterPage.jsx
+│   │   └── ChatPage.jsx
+│   ├── services/                # Minimal services
+│   │   ├── authService.js       # Authentication API
+│   │   └── messageService.js    # Message API
+│   ├── context/                 # Essential context
+│   │   └── AuthContext.jsx      # Authentication state
+│   ├── App.jsx                  # Main application with routes
+│   └── index.jsx                # Entry point
+└── package.json
+```
+
+#### Phased Implementation Strategy
+
+1. **Phase 1: Authentication (Current Focus)**
+   - Implement login and registration functionality
+   - Set up authentication context and token storage
+   - Create protected routes
+   - Connect to backend auth endpoints
+
+2. **Phase 2: Basic Messaging**
+   - Implement simple message list and input
+   - Create message service for API communication
+   - Add polling for new messages (no WebSockets yet)
+
+3. **Phase 3: Enhanced Features**
+   - Add real-time features as needed
+   - Implement additional UI components from comprehensive plan
+   - Improve styling and user experience
+
+This minimal approach allows us to quickly get a functional UI that connects to our backend, while deferring more complex features until the core functionality is working properly.
+
+### Comprehensive Frontend Architecture (Future Reference)
+Converse will implement a React frontend with a separate application architecture, communicating with the Go backend via REST API and WebSockets.
+
+### Project Structure
+```
+converse-ui/
+├── public/
+│   ├── index.html
+│   ├── favicon.ico
+│   └── assets/
+├── src/
+│   ├── components/
+│   │   ├── auth/                # Authentication components
+│   │   │   ├── LoginForm.jsx
+│   │   │   └── RegisterForm.jsx
+│   │   ├── chat/                # Messaging components
+│   │   │   ├── MessageList.jsx
+│   │   │   ├── MessageItem.jsx
+│   │   │   ├── MessageInput.jsx
+│   │   │   └── ConversationList.jsx
+│   │   ├── layout/              # Layout components
+│   │   │   ├── Header.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── Footer.jsx
+│   │   │   └── Layout.jsx
+│   │   ├── profile/             # User profile components
+│   │   │   ├── UserProfile.jsx
+│   │   │   └── ProfileSettings.jsx
+│   │   └── common/              # Shared components
+│   │       ├── Button.jsx
+│   │       ├── Avatar.jsx
+│   │       └── Loading.jsx
+│   ├── pages/                   # Page components
+│   │   ├── LoginPage.jsx
+│   │   ├── RegisterPage.jsx
+│   │   ├── ChatPage.jsx
+│   │   ├── ProfilePage.jsx
+│   │   └── NotFoundPage.jsx
+│   ├── services/                # API and WebSocket services
+│   │   ├── api.js               # REST API client
+│   │   ├── websocket.js         # WebSocket client
+│   │   ├── authService.js       # Authentication service
+│   │   └── messageService.js    # Messaging service
+│   ├── context/                 # React context providers
+│   │   ├── AuthContext.jsx      # Authentication state
+│   │   └── ChatContext.jsx      # Chat state
+│   ├── hooks/                   # Custom React hooks
+│   │   ├── useAuth.js           # Authentication hook
+│   │   └── useChat.js           # Chat functionality hook
+│   ├── utils/                   # Utility functions
+│   │   ├── dateFormat.js        # Date formatting utilities
+│   │   └── validators.js        # Input validation utilities
+│   ├── styles/                  # CSS/SCSS files
+│   │   ├── variables.scss       # Design tokens
+│   │   └── global.scss          # Global styles
+│   ├── App.jsx                  # Main application component
+│   └── index.jsx                # Entry point
+├── package.json
+└── vite.config.js
+```
+
+### Key UI Layouts
+
+#### Main Application Layout
+```
+┌─────────────────────────────────────────────────┐
+│ Header (App Logo, User Status, Settings)        │
+├─────────┬───────────────────────────────────────┤
+│         │                                       │
+│         │                                       │
+│ Sidebar │        Main Content Area              │
+│         │                                       │
+│         │                                       │
+├─────────┴───────────────────────────────────────┤
+│ Footer (Optional - Version, Status)             │
+└─────────────────────────────────────────────────┘
+```
+
+### Core Screens
+
+1. **Authentication Screens**
+   - Login Screen: Email/password form with validation
+   - Registration Screen: Username, email, password fields
+
+2. **Main Chat Interface**
+   - Conversation list in sidebar (recent conversations)
+   - Active conversation in main content area
+   - Message input with typing indicator at bottom
+   - User status indicators (online/offline)
+
+3. **User Profile & Settings**
+   - Profile information display
+   - Account settings
+   - Notification preferences
+   - Security settings
+
+### State Management
+
+- **Authentication State**: JWT token, user profile, login status
+- **Chat State**: Active conversations, message history, unread counts
+- **UI State**: Active views, modals, responsive layout state
+- **WebSocket State**: Connection status, real-time events
+
+### User Flows
+
+1. **Authentication Flow**
+   - User enters credentials → Client validates → Server authenticates → Chat interface loads
+
+2. **Messaging Flow**
+   - User selects conversation → Message history loads → User sends message → Real-time updates
+
+3. **Profile Management Flow**
+   - User navigates to profile → Views/edits information → Saves changes → Server updates
+
+### Integration with Backend
+
+1. **REST API Integration**
+   - Authentication endpoints (login, register)
+   - Message retrieval (get conversations, message history)
+   - Profile management (get/update profile)
+
+2. **WebSocket Integration**
+   - Real-time message delivery
+   - Typing indicators
+   - Online presence
+   - Read receipts
+
+### Responsive Design
+
+- Mobile-first approach
+- Breakpoints for different device sizes:
+  - Small (mobile): 320px - 576px
+  - Medium (tablet): 577px - 992px
+  - Large (desktop): 993px+
+- Collapsible sidebar on smaller screens
+- Optimized layouts for different form factors
+
+### Visual Design Elements
+
+- **Color Palette**
+  - Primary: #3498db (brand blue)
+  - Secondary: #2ecc71 (success green)
+  - Accent: #e74c3c (notification red)
+  - Neutrals: #f8f9fa, #e9ecef, #dee2e6, #ced4da, #6c757d, #343a40
+
+- **Typography**
+  - Sans-serif system fonts for optimal performance
+  - Clear hierarchy with defined text styles
+  - Consistent font weights
+
+- **Visual Elements**
+  - Subtle shadows for elevation
+  - Rounded corners for friendly feel
+  - Clear read/unread indicators
+  - User avatars and status indicators
+
+### Implementation Phases
+
+1. **Phase 1: Core Structure**
+   - Project setup with React and Vite
+   - Routing configuration
+   - Authentication screens
+   - Basic layout components
+
+2. **Phase 2: Messaging UI**
+   - Conversation list
+   - Message view components
+   - Message input
+   - Basic styling
+
+3. **Phase 3: Real-time Features**
+   - REST API integration
+   - WebSocket connection
+   - Typing indicators
+   - Message status indicators
+
+4. **Phase 4: Polish & Refinement**
+   - Animations and transitions
+   - Performance optimization
+   - Responsive design improvements
+   - Error handling and fallbacks 
