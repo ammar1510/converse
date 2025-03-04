@@ -1,5 +1,5 @@
-internal/.env
-internal/.env_prod
+.env
+.env_prod
 .DS_Store
 converse-ui/.env
 
