@@ -41,6 +41,8 @@ Main application entrypoint that initializes and wires together all components.
   - Establishes database connection
   - Sets up API routes and middleware
   - Starts the HTTP server
+  - Implements graceful shutdown for clean termination
+  - Configures CORS for cross-origin requests
 
 ## Package: internal/api
 
@@ -61,6 +63,8 @@ Implements authentication-related API endpoints.
   - Returns token with user data
 - **`GetMe(c *gin.Context)`**: Retrieves authenticated user's profile
   - Gets user ID from JWT context
+  - Converts string ID to UUID
+  - Fetches user data from database
   - Returns user profile data
 
 ### auth_test.go
@@ -166,6 +170,9 @@ Manages database connectivity and operations.
   - Queries database for matching email
   - Returns user object or not found error
 - **`UpdateLastSeen(userID uuid.UUID)`**: Updates user's last activity timestamp
+- **`GetUserByID(id uuid.UUID)`**: Retrieves user by their UUID
+  - Queries database for matching ID
+  - Returns user object or not found error
 
 ### supabase_test.go
 Tests for database operations.
@@ -200,14 +207,16 @@ Defines data structures and validation for user-related operations.
 Environment configuration file.
 
 - **JWT_SECRET**: Secret key for signing and verifying JWT tokens
-- **SUPABASE_DB_HOST**: Supabase database hostname
-- **SUPABASE_DB_PORT**: Database port (usually 5432)
-- **SUPABASE_DB_NAME**: Database name (usually postgres)
-- **SUPABASE_DB_USER**: Database username
-- **SUPABASE_DB_PASSWORD**: Database password
-- **REDIS_URL**: URL for Redis connection (not yet implemented)
 - **PORT**: Port for HTTP server (default 8080)
 - **ENV**: Application environment (development, production)
+- **DB_HOST**: Database hostname (localhost for local development)
+- **DB_PORT**: Database port (usually 5432)
+- **DB_NAME**: Database name (converse)
+- **DB_USER**: Database username (system username)
+- **DB_PASSWORD**: Database password
+- **ALLOWED_ORIGINS**: CORS allowed origins (for frontend communication)
+- **LOG_LEVEL**: Application logging level
+- **API_PREFIX**: Prefix for all API routes
 
 ## Testing Status
 
@@ -227,8 +236,9 @@ Environment configuration file.
      - Missing token
      - Invalid format
      - Missing Bearer prefix
-   - ⚠️ `TestGetMe`: Partially implemented
-     - User profile retrieval needs database integration
+   - ✅ `TestGetMe`: All cases pass
+     - User profile retrieval with valid token
+     - Unauthorized access attempts
 
 2. **Database Package Tests** (`internal/database/`)
    - ✅ `TestNewDB`: Connection handling
@@ -244,13 +254,21 @@ Environment configuration file.
    - ✅ `TestValidateToken`: JWT validation
    - ✅ `TestInitJWTKey`: JWT key management
 
+4. **End-to-End API Testing**
+   - ✅ User registration endpoint successfully creates new users
+   - ✅ Login endpoint verifies credentials and returns valid JWT tokens
+   - ✅ Protected `/me` endpoint correctly returns user data when authenticated
+   - ✅ Authentication middleware properly blocks unauthorized requests
+   - ✅ Health check endpoint confirms server status
+
 ### Environment Requirements
 - PostgreSQL database with user-specific credentials
 - Environment variables properly configured
 - JWT secret key initialized
+- Database schema with users table created
 
 ### Known Issues
-1. Database tests require specific user configuration:
+1. Database configuration:
    - Using system username instead of 'postgres'
    - Proper database permissions
    - Test database (`converse_test`) created
