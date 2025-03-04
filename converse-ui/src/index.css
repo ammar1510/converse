@@ -1,0 +1,267 @@
+:root {
+  --primary-color: #3498db;
+  --primary-hover: #2980b9;
+  --success-color: #2ecc71;
+  --danger-color: #e74c3c;
+  --light-color: #f8f9fa;
+  --dark-color: #343a40;
+  --gray-color: #6c757d;
+  --border-color: #dee2e6;
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: #f5f8fa;
+  color: var(--dark-color);
+  line-height: 1.6;
+}
+
+/* App Container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 2rem;
+  background-color: #fff;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.navbar-menu {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.navbar-item {
+  color: var(--dark-color);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.navbar-item:hover {
+  color: var(--primary-color);
+}
+
+.navbar-user {
+  color: var(--dark-color);
+  margin-right: 1rem;
+}
+
+.navbar-button {
+  background-color: transparent;
+  border: none;
+  color: var(--danger-color);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: color 0.3s;
+}
+
+.navbar-button:hover {
+  color: #c0392b;
+}
+
+/* Auth Pages */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  min-height: calc(100vh - 60px);
+}
+
+.auth-container {
+  max-width: 500px;
+  width: 100%;
+}
+
+.auth-form-container {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 2rem;
+}
+
+.auth-form-container h2 {
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: var(--dark-color);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: var(--gray-color);
+}
+
+.form-group input {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus {
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+.auth-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-top: 0.5rem;
+}
+
+.auth-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.auth-button:disabled {
+  background-color: var(--gray-color);
+  cursor: not-allowed;
+}
+
+.auth-error {
+  background-color: rgba(231, 76, 60, 0.1);
+  color: var(--danger-color);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.auth-success {
+  background-color: rgba(46, 204, 113, 0.1);
+  color: var(--success-color);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.auth-links {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.auth-links a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+/* Chat Page */
+.chat-page {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.chat-container {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 900px;
+  min-height: 70vh;
+  padding: 1.5rem;
+}
+
+.chat-header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.chat-header h2 {
+  color: var(--dark-color);
+  margin-bottom: 0.5rem;
+}
+
+.chat-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem 0;
+  color: var(--gray-color);
+  text-align: center;
+}
+
+.chat-placeholder ul {
+  list-style-position: inside;
+  text-align: left;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0.5rem 1rem;
+  }
+  
+  .auth-page {
+    padding: 1rem;
+  }
+  
+  .chat-container {
+    padding: 1rem;
+  }
+}
