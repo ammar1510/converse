@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -52,15 +54,14 @@ func main() {
 		}
 
 		// Build connection string
-		dbURL = "postgres://" + dbUser
-		if dbPass != "" {
-			dbURL += ":" + dbPass
-		}
-		dbURL += "@" + dbHost
-		if dbPort != "" {
-			dbURL += ":" + dbPort
-		}
-		dbURL += "/" + dbName + "?sslmode=disable"
+		dbURL = fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			dbUser,
+			dbPass,
+			dbHost,
+			dbPort,
+			dbName,
+		)
 	}
 
 	// Create database connection
@@ -74,11 +75,14 @@ func main() {
 	// Initialize router with default middleware (logger and recovery)
 	router := gin.Default()
 
-	// Configure CORS
+	// Configure CORS using environment variable
+	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+	allowedOrigins := strings.Split(allowedOriginsStr, ",")
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"}, // Update with your frontend URL(s)
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -90,14 +94,14 @@ func main() {
 
 	// Set up API routes
 	// Public routes (no authentication required)
-	router.POST("/api/register", authHandler.Register)
-	router.POST("/api/login", authHandler.Login)
+	router.POST("/api/auth/register", authHandler.Register)
+	router.POST("/api/auth/login", authHandler.Login)
 
 	// Protected routes (authentication required)
 	authorized := router.Group("/api")
 	authorized.Use(api.AuthMiddleware())
 	{
-		authorized.GET("/me", authHandler.GetMe)
+		authorized.GET("/auth/me", authHandler.GetMe)
 
 		// Message routes
 		authorized.POST("/messages", messageHandler.SendMessage)

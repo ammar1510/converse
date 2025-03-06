@@ -1,3 +1,5 @@
 .env
+.env.prod
 .DS_Store
-.env_prod
+converse-ui/.env
+converse-ui/.env.prod
