@@ -105,8 +105,8 @@ func setupMessageTest(t *testing.T) (*gin.Engine, *MockDB, uuid.UUID) {
 	// Create mock database
 	mockDB := new(MockDB)
 
-	// Create message handler with mock DB
-	handler := &MessageHandler{DB: mockDB}
+	// Create message handler with mock DB using the constructor
+	handler := NewMessageHandler(mockDB)
 
 	// Set up routes with authentication middleware mock
 	group := router.Group("/api")

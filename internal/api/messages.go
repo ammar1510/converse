@@ -34,7 +34,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// Get the sender's ID from the JWT token
+	// The userID from context is now a UUID object
 	senderID := userID.(uuid.UUID)
 
 	// Create the message
@@ -55,7 +55,10 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 		return
 	}
 
-	messages, err := h.DB.GetMessagesByUser(userID.(uuid.UUID))
+	// The userID from context is now a UUID object
+	userUUID := userID.(uuid.UUID)
+
+	messages, err := h.DB.GetMessagesByUser(userUUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,6 +75,9 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		return
 	}
 
+	// The userID from context is now a UUID object
+	userUUID := userID.(uuid.UUID)
+
 	otherUserIDStr := c.Param("userID")
 	otherUserID, err := uuid.Parse(otherUserIDStr)
 	if err != nil {
@@ -79,7 +85,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		return
 	}
 
-	messages, err := h.DB.GetConversation(userID.(uuid.UUID), otherUserID)
+	messages, err := h.DB.GetConversation(userUUID, otherUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -97,6 +103,9 @@ func (h *MessageHandler) MarkMessageAsRead(c *gin.Context) {
 		return
 	}
 
+	// The userID from context is now a UUID object
+	userUUID := userID.(uuid.UUID)
+
 	messageIDStr := c.Param("messageID")
 	messageID, err := uuid.Parse(messageIDStr)
 	if err != nil {
@@ -106,7 +115,7 @@ func (h *MessageHandler) MarkMessageAsRead(c *gin.Context) {
 
 	// TODO: Verify the user is the receiver of this message for security
 	// This would require an additional DB lookup
-	_ = userID // Using userID to avoid linter error, will be used in the future
+	_ = userUUID // Using userUUID to avoid linter error, will be used in the future
 
 	err = h.DB.MarkMessageAsRead(messageID)
 	if err != nil {
