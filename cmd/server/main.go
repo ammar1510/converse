@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -74,9 +75,12 @@ func main() {
 	// Initialize router with default middleware (logger and recovery)
 	router := gin.Default()
 
-	// Configure CORS - support both frontend development ports (5173 for Vite, 3000 for CRA)
+	// Configure CORS using environment variable
+	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+	allowedOrigins := strings.Split(allowedOriginsStr, ",")
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
