@@ -90,6 +90,7 @@ func main() {
 
 	// Create API handlers
 	authHandler := api.NewAuthHandler(db)
+	messageHandler := api.NewMessageHandler(db)
 
 	// Set up API routes
 	// Public routes (no authentication required)
@@ -101,6 +102,13 @@ func main() {
 	authorized.Use(api.AuthMiddleware())
 	{
 		authorized.GET("/auth/me", authHandler.GetMe)
+
+		// Message routes
+		authorized.POST("/messages", messageHandler.SendMessage)
+		authorized.GET("/messages", messageHandler.GetMessages)
+		authorized.GET("/messages/conversation/:userID", messageHandler.GetConversation)
+		authorized.PUT("/messages/:messageID/read", messageHandler.MarkMessageAsRead)
+
 		// More protected routes can be added here
 	}
 

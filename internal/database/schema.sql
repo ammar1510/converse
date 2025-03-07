@@ -15,3 +15,14 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     last_seen TIMESTAMP WITH TIME ZONE NOT NULL
 ); 
+
+-- Create messages table
+CREATE TABLE IF NOT EXISTS messages (
+    id UUID PRIMARY KEY,
+    sender_id UUID NOT NULL REFERENCES users(id),
+    receiver_id UUID NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMP WITH TIME ZONE
+); 
