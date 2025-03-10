@@ -124,12 +124,8 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		return
 	}
 
-	// Convert string to UUID
-	userUUID, err := uuid.Parse(userID.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
-		return
-	}
+	// The userID is already a UUID from the middleware
+	userUUID := userID.(uuid.UUID)
 
 	// Get user from database
 	user, err := h.DB.GetUserByID(userUUID)

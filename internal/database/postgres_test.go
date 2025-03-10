@@ -4,31 +4,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ammar1510/converse/internal/models"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/ammar1510/converse/internal/models"
 )
 
 // setupTestDB creates a test database connection
-func setupTestDB(t *testing.T) *DB {
+func setupTestDB(t *testing.T) *PostgresDB {
 	// Use test database connection string
 	connStr := "postgres://ammar3.shaikh@localhost:5432/converse_test?sslmode=disable"
-	db, err := NewDB(connStr)
+	db, err := NewPostgresDB(connStr)
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
 	}
-	
+
 	// Clean up test data
 	_, err = db.Exec("DELETE FROM users")
 	if err != nil {
 		t.Fatalf("Failed to clean up test data: %v", err)
 	}
-	
+
 	return db
 }
 
-// TestNewDB tests database connection creation
-func TestNewDB(t *testing.T) {
+// TestNewPostgresDB tests database connection creation
+func TestNewPostgresDB(t *testing.T) {
 	tests := []struct {
 		name      string
 		connStr   string
@@ -45,11 +45,11 @@ func TestNewDB(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, err := NewDB(tt.connStr)
-			
+			db, err := NewPostgresDB(tt.connStr)
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, db)
@@ -66,7 +66,7 @@ func TestNewDB(t *testing.T) {
 func TestCreateUser(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	
+
 	tests := []struct {
 		name      string
 		username  string
@@ -96,11 +96,11 @@ func TestCreateUser(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			user, err := db.CreateUser(tt.username, tt.email, tt.password)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, user)
@@ -124,7 +124,7 @@ func TestCreateUser(t *testing.T) {
 func TestGetUserByEmail(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	
+
 	// Create a test user
 	testUser := &models.User{
 		ID:           uuid.New(),
@@ -134,14 +134,14 @@ func TestGetUserByEmail(t *testing.T) {
 		CreatedAt:    time.Now(),
 		LastSeen:     time.Now(),
 	}
-	
+
 	_, err := db.Exec(`
 		INSERT INTO users (id, username, email, password_hash, created_at, last_seen) 
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		testUser.ID, testUser.Username, testUser.Email, testUser.PasswordHash,
 		testUser.CreatedAt, testUser.LastSeen)
 	assert.NoError(t, err)
-	
+
 	tests := []struct {
 		name      string
 		email     string
@@ -158,11 +158,11 @@ func TestGetUserByEmail(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			user, err := db.GetUserByEmail(tt.email)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, user)
@@ -183,7 +183,7 @@ func TestGetUserByEmail(t *testing.T) {
 func TestUpdateLastSeen(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	
+
 	// Create a test user
 	testUser := &models.User{
 		ID:           uuid.New(),
@@ -193,14 +193,14 @@ func TestUpdateLastSeen(t *testing.T) {
 		CreatedAt:    time.Now(),
 		LastSeen:     time.Now(),
 	}
-	
+
 	_, err := db.Exec(`
 		INSERT INTO users (id, username, email, password_hash, created_at, last_seen) 
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		testUser.ID, testUser.Username, testUser.Email, testUser.PasswordHash,
 		testUser.CreatedAt, testUser.LastSeen)
 	assert.NoError(t, err)
-	
+
 	tests := []struct {
 		name      string
 		userID    uuid.UUID
@@ -217,16 +217,16 @@ func TestUpdateLastSeen(t *testing.T) {
 			wantError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := db.UpdateLastSeen(tt.userID)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				
+
 				// Verify the last_seen timestamp was updated
 				var lastSeen time.Time
 				err = db.QueryRow("SELECT last_seen FROM users WHERE id = $1", tt.userID).Scan(&lastSeen)
@@ -235,4 +235,4 @@ func TestUpdateLastSeen(t *testing.T) {
 			}
 		})
 	}
-} 
+}

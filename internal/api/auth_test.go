@@ -19,15 +19,20 @@ import (
 func setupTestRouter(t *testing.T) (*gin.Engine, *AuthHandler) {
 	// Create test database connection
 	connStr := "postgres://ammar3.shaikh@localhost:5432/converse_test?sslmode=disable"
-	db, err := database.NewDB(connStr)
+	db, err := database.NewDatabase(database.PostgreSQL, connStr)
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
 	}
 
 	// Clean up test data
+	_, err = db.Exec("DELETE FROM messages")
+	if err != nil {
+		t.Fatalf("Failed to clean up test data (messages): %v", err)
+	}
+
 	_, err = db.Exec("DELETE FROM users")
 	if err != nil {
-		t.Fatalf("Failed to clean up test data: %v", err)
+		t.Fatalf("Failed to clean up test data (users): %v", err)
 	}
 
 	// Create auth handler
@@ -130,7 +135,7 @@ func TestLogin(t *testing.T) {
 	assert.NoError(t, err)
 
 	connStr := "postgres://ammar3.shaikh@localhost:5432/converse_test?sslmode=disable"
-	db, err := database.NewDB(connStr)
+	db, err := database.NewDatabase(database.PostgreSQL, connStr)
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -234,7 +239,7 @@ func TestGetMe(t *testing.T) {
 	assert.NoError(t, err)
 
 	connStr := "postgres://ammar3.shaikh@localhost:5432/converse_test?sslmode=disable"
-	db, err := database.NewDB(connStr)
+	db, err := database.NewDatabase(database.PostgreSQL, connStr)
 	assert.NoError(t, err)
 	defer db.Close()
 

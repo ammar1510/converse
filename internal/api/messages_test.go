@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/ammar1510/converse/internal/database"
 	"github.com/ammar1510/converse/internal/models"
 )
 
@@ -88,6 +89,30 @@ func (m *MockDB) CreateUser(username, email, password string) (*models.User, err
 func (m *MockDB) UpdateLastSeen(userID uuid.UUID) error {
 	args := m.Called(userID)
 	return args.Error(0)
+}
+
+// GetMessageByID mocks retrieving a message by its ID
+func (m *MockDB) GetMessageByID(messageID uuid.UUID) (*models.Message, error) {
+	args := m.Called(messageID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Message), args.Error(1)
+}
+
+// Close mocks closing the database connection
+func (m *MockDB) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+// Exec mocks executing a SQL query
+func (m *MockDB) Exec(query string, args ...interface{}) (database.ExecResult, error) {
+	mockArgs := m.Called(append([]interface{}{query}, args...)...)
+	if mockArgs.Get(0) == nil {
+		return nil, mockArgs.Error(1)
+	}
+	return mockArgs.Get(0).(database.ExecResult), mockArgs.Error(1)
 }
 
 // Setup helper functions for tests
@@ -339,14 +364,25 @@ func TestGetConversation(t *testing.T) {
 }
 
 func TestMarkMessageAsRead(t *testing.T) {
-	router, mockDB, _ := setupMessageTest(t) // Use _ to ignore the userID since we don't need it
+	router, mockDB, userID := setupMessageTest(t) // Use userID for authentication
 
 	// Test case: successful marking message as read
 	t.Run("Successful marking message as read", func(t *testing.T) {
 		// Setup
 		messageID := uuid.New()
 
-		// Setup mock expectations
+		// Create a mock message with the current user as receiver
+		mockMessage := &models.Message{
+			ID:         messageID,
+			SenderID:   uuid.New(), // Some other user
+			ReceiverID: userID,     // Current user is the receiver
+			Content:    "Test message",
+			CreatedAt:  time.Now(),
+			IsRead:     false,
+		}
+
+		// Setup mock expectations - first GetMessageByID, then MarkMessageAsRead
+		mockDB.On("GetMessageByID", messageID).Return(mockMessage, nil).Once()
 		mockDB.On("MarkMessageAsRead", messageID).Return(nil).Once()
 
 		// Create request
@@ -385,8 +421,8 @@ func TestMarkMessageAsRead(t *testing.T) {
 		// Setup
 		messageID := uuid.New()
 
-		// Setup mock expectations - simulate error
-		mockDB.On("MarkMessageAsRead", messageID).Return(fmt.Errorf("message not found")).Once()
+		// Setup mock expectations - simulate message not found
+		mockDB.On("GetMessageByID", messageID).Return(nil, fmt.Errorf("message not found")).Once()
 
 		// Create request
 		req, _ := http.NewRequest("PUT", fmt.Sprintf("/api/messages/%s/read", messageID), nil)

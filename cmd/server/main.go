@@ -39,7 +39,15 @@ func main() {
 	}
 	auth.InitJWTKey([]byte(jwtSecret))
 
-	// Connect to database
+	// Determine database type from environment (default to PostgreSQL)
+	dbTypeStr := os.Getenv("DB_TYPE")
+	if dbTypeStr == "" {
+		dbTypeStr = "postgres" // Default to PostgreSQL
+	}
+
+	dbType := database.DatabaseType(dbTypeStr)
+
+	// Get connection string
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		// Fallback to individual connection parameters if DATABASE_URL not set
@@ -53,24 +61,28 @@ func main() {
 			log.Fatal("Database connection details missing. Set DATABASE_URL or individual DB_* variables")
 		}
 
-		// Build connection string
-		dbURL = fmt.Sprintf(
-			"postgres://%s:%s@%s:%s/%s?sslmode=disable",
-			dbUser,
-			dbPass,
-			dbHost,
-			dbPort,
-			dbName,
-		)
+		// Build connection string based on database type
+		switch dbType {
+		case database.PostgreSQL:
+			dbURL = fmt.Sprintf(
+				"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+				dbUser, dbPass, dbHost, dbPort, dbName,
+			)
+		case database.MySQL:
+			dbURL = fmt.Sprintf(
+				"mysql://%s:%s@tcp(%s:%s)/%s",
+				dbUser, dbPass, dbHost, dbPort, dbName,
+			)
+		}
 	}
 
-	// Create database connection
-	db, err := database.NewDB(dbURL)
+	// Create database connection using factory
+	db, err := database.NewDatabase(dbType, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
-	log.Println("Connected to database successfully")
+	log.Printf("Connected to %s database successfully", dbType)
 
 	// Initialize router with default middleware (logger and recovery)
 	router := gin.Default()
