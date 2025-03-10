@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,7 +9,11 @@ import (
 
 	"github.com/ammar1510/converse/internal/database"
 	"github.com/ammar1510/converse/internal/models"
+	"github.com/ammar1510/converse/internal/websocket"
 )
+
+// Global WebSocket manager instance
+var WSManager *websocket.Manager
 
 // MessageHandler handles message-related routes
 type MessageHandler struct {
@@ -42,6 +47,25 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Notify the receiver via WebSocket if they're connected
+	if WSManager != nil {
+		// Create WebSocket message
+		wsMessage := websocket.WebSocketMessage{
+			Type:       "message",
+			SenderID:   senderID,
+			ReceiverID: req.ReceiverID,
+			Content:    req.Content,
+			Timestamp:  message.CreatedAt,
+		}
+
+		// Convert to JSON
+		messageJSON, err := json.Marshal(wsMessage)
+		if err == nil {
+			// Send to receiver
+			WSManager.SendToUser(req.ReceiverID, messageJSON)
+		}
 	}
 
 	c.JSON(http.StatusCreated, message)
@@ -131,6 +155,24 @@ func (h *MessageHandler) MarkMessageAsRead(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Notify the sender via WebSocket that their message was read
+	if WSManager != nil {
+		// Create WebSocket message
+		wsMessage := websocket.WebSocketMessage{
+			Type:       "read_receipt",
+			SenderID:   userUUID,
+			ReceiverID: message.SenderID,
+			Timestamp:  message.CreatedAt,
+		}
+
+		// Convert to JSON
+		messageJSON, err := json.Marshal(wsMessage)
+		if err == nil {
+			// Send to original sender
+			WSManager.SendToUser(message.SenderID, messageJSON)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Message marked as read"})
