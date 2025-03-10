@@ -1,8 +1,9 @@
 import { useAuth } from '../context/AuthContext';
+import Messaging from '../components/messaging/Messaging';
 
 /**
  * ChatPage component
- * Placeholder for the chat interface (will be expanded in Phase 2)
+ * Implements the chat interface using the Messaging component
  */
 const ChatPage = () => {
   const { user } = useAuth();
@@ -11,18 +12,13 @@ const ChatPage = () => {
     <div className="chat-page">
       <div className="chat-container">
         <div className="chat-header">
-          <h2>Welcome to Converse, {user?.username}!</h2>
-          <p>Chat functionality coming soon in Phase 2.</p>
+          <div className="welcome-message">
+            <span className="wave-emoji">👋</span>
+            <h2>Hey <span className="username-highlight">{user?.username}</span>! Ready to chat?</h2>
+          </div>
         </div>
-        <div className="chat-placeholder">
-          <p>The chat interface will be implemented here.</p>
-          <p>Features will include:</p>
-          <ul>
-            <li>Real-time messaging with WebSockets</li>
-            <li>Message history and loading</li>
-            <li>Typing indicators</li>
-            <li>Online presence</li>
-          </ul>
+        <div className="messaging-wrapper">
+          <Messaging />
         </div>
       </div>
     </div>

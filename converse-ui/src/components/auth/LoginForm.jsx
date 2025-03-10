@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 
 /**
  * LoginForm component
- * Handles user login
+ * Handles user login with improved UI
  */
 const LoginForm = () => {
   const [email, setEmail] = useState('');
@@ -43,7 +43,7 @@ const LoginForm = () => {
 
   return (
     <div className="auth-form-container">
-      <h2>Login to Converse</h2>
+      <h2>Welcome Back</h2>
       
       {(formError || error) && (
         <div className="auth-error">
@@ -57,6 +57,7 @@ const LoginForm = () => {
           <input
             type="email"
             id="email"
+            placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isSubmitting}
@@ -69,6 +70,7 @@ const LoginForm = () => {
           <input
             type="password"
             id="password"
+            placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isSubmitting}
@@ -81,13 +83,13 @@ const LoginForm = () => {
           className="auth-button"
           disabled={isSubmitting}
         >
-          {isSubmitting ? 'Logging in...' : 'Login'}
+          {isSubmitting ? 'LOGGING IN...' : 'LOGIN'}
         </button>
       </form>
       
       <div className="auth-links">
         <p>
-          Don't have an account? <Link to="/register">Register</Link>
+          Don't have an account? <Link to="/register">Register Here</Link>
         </p>
       </div>
     </div>
