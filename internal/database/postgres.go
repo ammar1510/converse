@@ -11,19 +11,20 @@ import (
 	"github.com/ammar1510/converse/internal/models"
 )
 
+// Error definitions
 var (
 	ErrUserNotFound      = errors.New("user not found")
 	ErrUserAlreadyExists = errors.New("user already exists")
 	ErrMessageNotFound   = errors.New("message not found")
 )
 
-// DB is the database connection
-type DB struct {
+// PostgresDB is the PostgreSQL implementation of DBInterface
+type PostgresDB struct {
 	*sql.DB
 }
 
-// NewDB creates a new database connection
-func NewDB(connStr string) (*DB, error) {
+// NewPostgresDB creates a new PostgreSQL database connection
+func NewPostgresDB(connStr string) (*PostgresDB, error) {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
@@ -33,11 +34,11 @@ func NewDB(connStr string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db}, nil
+	return &PostgresDB{db}, nil
 }
 
 // CreateUser stores a new user in the database
-func (db *DB) CreateUser(username, email, passwordHash string) (*models.User, error) {
+func (db *PostgresDB) CreateUser(username, email, passwordHash string) (*models.User, error) {
 	// Check if user already exists
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE username = $1 OR email = $2",
@@ -60,11 +61,10 @@ func (db *DB) CreateUser(username, email, passwordHash string) (*models.User, er
 		LastSeen:     time.Now(),
 	}
 
-	_, err = db.Exec(`
-		INSERT INTO users (id, username, email, password_hash, created_at, last_seen) 
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		user.ID, user.Username, user.Email, user.PasswordHash, user.CreatedAt, user.LastSeen)
-
+	_, err = db.Exec(
+		"INSERT INTO users (id, username, email, password_hash, created_at, last_seen) VALUES ($1, $2, $3, $4, $5, $6)",
+		user.ID, user.Username, user.Email, user.PasswordHash, user.CreatedAt, user.LastSeen,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (db *DB) CreateUser(username, email, passwordHash string) (*models.User, er
 }
 
 // GetUserByEmail retrieves a user by email
-func (db *DB) GetUserByEmail(email string) (*models.User, error) {
+func (db *PostgresDB) GetUserByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 
 	err := db.QueryRow(`
@@ -96,7 +96,7 @@ func (db *DB) GetUserByEmail(email string) (*models.User, error) {
 }
 
 // UpdateLastSeen updates the user's last_seen timestamp
-func (db *DB) UpdateLastSeen(userID uuid.UUID) error {
+func (db *PostgresDB) UpdateLastSeen(userID uuid.UUID) error {
 	result, err := db.Exec("UPDATE users SET last_seen = $1 WHERE id = $2",
 		time.Now(), userID)
 	if err != nil {
@@ -116,7 +116,7 @@ func (db *DB) UpdateLastSeen(userID uuid.UUID) error {
 }
 
 // GetUserByID retrieves a user by their ID
-func (db *DB) GetUserByID(id uuid.UUID) (*models.User, error) {
+func (db *PostgresDB) GetUserByID(id uuid.UUID) (*models.User, error) {
 	var user models.User
 	err := db.QueryRow(`
 		SELECT id, username, email, password_hash, 
@@ -145,7 +145,7 @@ func (db *DB) GetUserByID(id uuid.UUID) (*models.User, error) {
 }
 
 // CreateMessage stores a new message in the database
-func (db *DB) CreateMessage(senderID, receiverID uuid.UUID, content string) (*models.Message, error) {
+func (db *PostgresDB) CreateMessage(senderID, receiverID uuid.UUID, content string) (*models.Message, error) {
 	// Verify both users exist
 	_, err := db.GetUserByID(senderID)
 	if err != nil {
@@ -178,7 +178,7 @@ func (db *DB) CreateMessage(senderID, receiverID uuid.UUID, content string) (*mo
 }
 
 // GetMessagesByUser retrieves all messages where the user is either sender or receiver
-func (db *DB) GetMessagesByUser(userID uuid.UUID) ([]*models.Message, error) {
+func (db *PostgresDB) GetMessagesByUser(userID uuid.UUID) ([]*models.Message, error) {
 	rows, err := db.Query(
 		"SELECT id, sender_id, receiver_id, content, created_at, is_read, updated_at FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at DESC",
 		userID,
@@ -212,8 +212,35 @@ func (db *DB) GetMessagesByUser(userID uuid.UUID) ([]*models.Message, error) {
 	return messages, nil
 }
 
+// GetMessageByID retrieves a message by its ID
+func (db *PostgresDB) GetMessageByID(messageID uuid.UUID) (*models.Message, error) {
+	var msg models.Message
+	var updatedAt sql.NullTime
+
+	err := db.QueryRow(`
+		SELECT id, sender_id, receiver_id, content, created_at, is_read, updated_at 
+		FROM messages 
+		WHERE id = $1`,
+		messageID).Scan(
+		&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content,
+		&msg.CreatedAt, &msg.IsRead, &updatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, ErrMessageNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if updatedAt.Valid {
+		msg.UpdatedAt = &updatedAt.Time
+	}
+
+	return &msg, nil
+}
+
 // GetConversation retrieves messages between two users
-func (db *DB) GetConversation(userID1, userID2 uuid.UUID) ([]*models.Message, error) {
+func (db *PostgresDB) GetConversation(userID1, userID2 uuid.UUID) ([]*models.Message, error) {
 	rows, err := db.Query(
 		`SELECT id, sender_id, receiver_id, content, created_at, is_read, updated_at 
 		FROM messages 
@@ -251,7 +278,7 @@ func (db *DB) GetConversation(userID1, userID2 uuid.UUID) ([]*models.Message, er
 }
 
 // MarkMessageAsRead marks a message as read
-func (db *DB) MarkMessageAsRead(messageID uuid.UUID) error {
+func (db *PostgresDB) MarkMessageAsRead(messageID uuid.UUID) error {
 	now := time.Now().UTC()
 	result, err := db.Exec(
 		"UPDATE messages SET is_read = true, updated_at = $1 WHERE id = $2",
@@ -271,4 +298,14 @@ func (db *DB) MarkMessageAsRead(messageID uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// Close closes the database connection
+func (db *PostgresDB) Close() error {
+	return db.DB.Close()
+}
+
+// Exec executes a query without returning any rows
+func (db *PostgresDB) Exec(query string, args ...interface{}) (ExecResult, error) {
+	return db.DB.Exec(query, args...)
 }

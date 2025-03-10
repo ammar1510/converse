@@ -113,10 +113,20 @@ func (h *MessageHandler) MarkMessageAsRead(c *gin.Context) {
 		return
 	}
 
-	// TODO: Verify the user is the receiver of this message for security
-	// This would require an additional DB lookup
-	_ = userUUID // Using userUUID to avoid linter error, will be used in the future
+	// Verify the user is the receiver of this message for security
+	message, err := h.DB.GetMessageByID(messageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve message"})
+		return
+	}
 
+	// Check if the authenticated user is the intended recipient
+	if message.ReceiverID != userUUID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not authorized to mark this message as read"})
+		return
+	}
+
+	// Continue with marking the message as read
 	err = h.DB.MarkMessageAsRead(messageID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

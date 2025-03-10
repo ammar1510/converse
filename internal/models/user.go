@@ -8,21 +8,21 @@ import (
 
 // User represents a user in the chat system
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Username     string     `json:"username"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"` // Never send to client
-	DisplayName  string     `json:"display_name,omitempty"`
-	AvatarURL    string     `json:"avatar_url,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	LastSeen     time.Time  `json:"last_seen"`
+	ID           uuid.UUID `json:"id"`
+	Username     string    `json:"username"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"` // Never send to client
+	DisplayName  string    `json:"display_name,omitempty"`
+	AvatarURL    string    `json:"avatar_url,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastSeen     time.Time `json:"last_seen"`
 }
 
 // UserRegistration contains data needed for user registration
 type UserRegistration struct {
 	Username string `json:"username" binding:"required,min=3,max=30"`
 	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Password string `json:"password" binding:"required,min=5"`
 }
 
 // UserLogin contains data needed for user login
@@ -39,4 +39,4 @@ type UserResponse struct {
 	DisplayName string    `json:"display_name,omitempty"`
 	AvatarURL   string    `json:"avatar_url,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
-} 
+}
