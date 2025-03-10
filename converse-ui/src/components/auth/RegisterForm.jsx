@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 
 /**
  * RegisterForm component
- * Handles user registration
+ * Handles user registration with improved UI
  */
 const RegisterForm = () => {
   const [username, setUsername] = useState('');
@@ -107,6 +107,7 @@ const RegisterForm = () => {
               <input
                 type="text"
                 id="username"
+                placeholder="Choose a username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isSubmitting}
@@ -119,6 +120,7 @@ const RegisterForm = () => {
               <input
                 type="email"
                 id="email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isSubmitting}
@@ -131,6 +133,7 @@ const RegisterForm = () => {
               <input
                 type="password"
                 id="password"
+                placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isSubmitting}
@@ -143,6 +146,7 @@ const RegisterForm = () => {
               <input
                 type="password"
                 id="confirmPassword"
+                placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={isSubmitting}
@@ -155,13 +159,13 @@ const RegisterForm = () => {
               className="auth-button"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Registering...' : 'Register'}
+              {isSubmitting ? 'CREATING ACCOUNT...' : 'SIGN UP'}
             </button>
           </form>
           
           <div className="auth-links">
             <p>
-              Already have an account? <Link to="/login">Login</Link>
+              Already have an account? <Link to="/login">Login Here</Link>
             </p>
           </div>
         </>
