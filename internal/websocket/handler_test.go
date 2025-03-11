@@ -18,7 +18,7 @@ import (
 )
 
 // setupTestRouter creates a test Gin router with the WebSocket handler
-func setupTestRouter(t *testing.T) (*gin.Engine, *Manager) {
+func setupTestRouter() (*gin.Engine, *Manager) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -156,7 +156,7 @@ func TestSendToUser(t *testing.T) {
 // TestHandleWebSocket tests the WebSocket handler
 func TestHandleWebSocket(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -182,7 +182,7 @@ func TestHandleWebSocket(t *testing.T) {
 // TestWebSocketMessageExchange tests sending and receiving messages via WebSocket
 func TestWebSocketMessageExchange(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -249,7 +249,7 @@ func TestWebSocketMessageExchange(t *testing.T) {
 // TestTypingIndicator tests the typing indicator functionality
 func TestTypingIndicator(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -316,7 +316,7 @@ func TestTypingIndicator(t *testing.T) {
 // TestClientDisconnect tests client disconnection handling
 func TestClientDisconnect(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -349,7 +349,7 @@ func TestClientDisconnect(t *testing.T) {
 // TestAuthenticationHandling tests the authentication handling in the WebSocket connection
 func TestAuthenticationHandling(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -414,7 +414,7 @@ func TestUnauthorizedAccess(t *testing.T) {
 // TestConcurrentConnections tests handling multiple concurrent connections
 func TestConcurrentConnections(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -463,7 +463,7 @@ func TestConcurrentConnections(t *testing.T) {
 // TestErrorHandling tests the error handling in the WebSocket handler
 func TestErrorHandling(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -511,7 +511,7 @@ func TestErrorHandling(t *testing.T) {
 // TestPingPong tests the ping/pong mechanism
 func TestPingPong(t *testing.T) {
 	// Setup test server
-	router, _ := setupTestRouter(t)
+	router, _ := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -623,7 +623,7 @@ func TestJWTProtocolAuthentication(t *testing.T) {
 // TestAuthMessageHandling tests handling of auth messages
 func TestAuthMessageHandling(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -671,7 +671,7 @@ func TestAuthMessageHandling(t *testing.T) {
 // TestJWTHeaderAuthentication tests authentication via HTTP Authorization header
 func TestJWTHeaderAuthentication(t *testing.T) {
 	// Setup test server
-	router, manager := setupTestRouter(t)
+	router, manager := setupTestRouter()
 	server := httptest.NewServer(router)
 	defer server.Close()
 
