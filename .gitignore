@@ -3,3 +3,5 @@
 .DS_Store
 converse-ui/.env
 converse-ui/.env.prod
+#ui 
+example-ui/*

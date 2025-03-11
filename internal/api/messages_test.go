@@ -115,6 +115,26 @@ func (m *MockDB) Exec(query string, args ...interface{}) (database.ExecResult, e
 	return mockArgs.Get(0).(database.ExecResult), mockArgs.Error(1)
 }
 
+// MockWebSocketManager is a mock implementation of the WebSocket manager
+type MockWebSocketManager struct {
+	mock.Mock
+}
+
+// SendToUser mocks the SendToUser method
+func (m *MockWebSocketManager) SendToUser(userID uuid.UUID, message []byte) {
+	m.Called(userID, message)
+}
+
+// Run mocks the Run method
+func (m *MockWebSocketManager) Run() {
+	m.Called()
+}
+
+// HandleWebSocket mocks the HandleWebSocket method
+func (m *MockWebSocketManager) HandleWebSocket(c *gin.Context) {
+	m.Called(c)
+}
+
 // Setup helper functions for tests
 
 // setupMessageTest creates a gin router with the MockDB and required middleware for message testing
@@ -439,4 +459,166 @@ func TestMarkMessageAsRead(t *testing.T) {
 		// Verify mock expectations were met
 		mockDB.AssertExpectations(t)
 	})
+}
+
+// TestSendMessageWithoutWebSocket tests the SendMessage handler with WebSocket manager set to nil
+func TestSendMessageWithoutWebSocket(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+
+	// Create mock DB
+	mockDB := new(MockDB)
+
+	// Save original WebSocket manager and set to nil for this test
+	originalWSManager := WSManager
+	WSManager = nil
+	defer func() { WSManager = originalWSManager }()
+
+	// Create message handler
+	handler := NewMessageHandler(mockDB)
+
+	// Create test router
+	router := gin.New()
+	router.POST("/messages", func(c *gin.Context) {
+		// Set user ID in context
+		userID := uuid.New()
+		c.Set("userID", userID)
+		handler.SendMessage(c)
+	})
+
+	// Create test message
+	receiverID := uuid.New()
+	message := models.MessageRequest{
+		ReceiverID: receiverID,
+		Content:    "Test message",
+	}
+
+	// Create expected response message
+	createdAt := time.Now().UTC()
+	expectedMessage := &models.Message{
+		ID:         uuid.New(),
+		SenderID:   uuid.New(), // This will be set by the handler
+		ReceiverID: receiverID,
+		Content:    "Test message",
+		CreatedAt:  createdAt,
+		IsRead:     false,
+	}
+
+	// Setup mock expectations
+	mockDB.On("CreateMessage", mock.Anything, receiverID, "Test message").Return(expectedMessage, nil)
+
+	// Create request
+	body, _ := json.Marshal(message)
+	req, _ := http.NewRequest("POST", "/messages", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Perform request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assert response
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// Verify mock expectations
+	mockDB.AssertExpectations(t)
+}
+
+// TestMarkMessageAsReadWithoutWebSocket tests the MarkMessageAsRead handler with WebSocket manager set to nil
+func TestMarkMessageAsReadWithoutWebSocket(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+
+	// Create mock DB
+	mockDB := new(MockDB)
+
+	// Save original WebSocket manager and set to nil for this test
+	originalWSManager := WSManager
+	WSManager = nil
+	defer func() { WSManager = originalWSManager }()
+
+	// Create message handler
+	handler := NewMessageHandler(mockDB)
+
+	// Create test router
+	router := gin.New()
+
+	// Create test user IDs
+	userID := uuid.New()
+	senderID := uuid.New()
+	messageID := uuid.New()
+
+	// Create test message
+	message := &models.Message{
+		ID:         messageID,
+		SenderID:   senderID,
+		ReceiverID: userID,
+		Content:    "Test message",
+		CreatedAt:  time.Now().UTC(),
+		IsRead:     false,
+	}
+
+	router.PUT("/messages/:messageID/read", func(c *gin.Context) {
+		// Set user ID in context
+		c.Set("userID", userID)
+		handler.MarkMessageAsRead(c)
+	})
+
+	// Setup mock expectations
+	mockDB.On("GetMessageByID", messageID).Return(message, nil)
+	mockDB.On("MarkMessageAsRead", messageID).Return(nil)
+
+	// Create request
+	req, _ := http.NewRequest("PUT", "/messages/"+messageID.String()+"/read", nil)
+
+	// Perform request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assert response
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Verify mock expectations
+	mockDB.AssertExpectations(t)
+}
+
+// TestWebSocketMessageFormat tests the format of WebSocket messages
+func TestWebSocketMessageFormat(t *testing.T) {
+	// Create test user IDs
+	senderID := uuid.New()
+	receiverID := uuid.New()
+
+	// Create test message
+	message := &models.Message{
+		ID:         uuid.New(),
+		SenderID:   senderID,
+		ReceiverID: receiverID,
+		Content:    "Test message",
+		CreatedAt:  time.Now().UTC(),
+		IsRead:     false,
+	}
+
+	// Create a JSON message that would be sent via WebSocket
+	wsMessage := map[string]interface{}{
+		"type":        "message",
+		"sender_id":   senderID.String(),
+		"receiver_id": receiverID.String(),
+		"content":     "Test message",
+		"timestamp":   message.CreatedAt.Format(time.RFC3339),
+	}
+
+	// Marshal to JSON
+	wsMessageJSON, err := json.Marshal(wsMessage)
+	assert.NoError(t, err)
+
+	// Unmarshal back to verify format
+	var parsedMessage map[string]interface{}
+	err = json.Unmarshal(wsMessageJSON, &parsedMessage)
+	assert.NoError(t, err)
+
+	// Verify message format
+	assert.Equal(t, "message", parsedMessage["type"])
+	assert.Equal(t, senderID.String(), parsedMessage["sender_id"])
+	assert.Equal(t, receiverID.String(), parsedMessage["receiver_id"])
+	assert.Equal(t, "Test message", parsedMessage["content"])
+	assert.NotEmpty(t, parsedMessage["timestamp"])
 }

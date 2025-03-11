@@ -1,78 +1,112 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { useChat } from '../../context/ChatContext';
 import ConversationsList from './ConversationsList';
 import ChatWindow from './ChatWindow';
 import MessageInput from './MessageInput';
 
 const Messaging = () => {
-  const defaultConversations = [
-    { 
-      id: 1, 
-      title: 'Conversation 1', 
-      lastMessage: 'Hey, how are you?', 
-      timestamp: '10:00 AM',
-      contact: {
-        name: 'Alice',
-        status: 'Online • Last seen just now',
-        avatar: 'https://ui-avatars.com/api/?name=Alice&background=4ead7c&color=fff&rounded=true&size=128'
-      }
-    },
-    { 
-      id: 2, 
-      title: 'Conversation 2', 
-      lastMessage: "Let's catch up later.", 
-      timestamp: '11:15 AM',
-      contact: {
-        name: 'Bob',
-        status: 'Last seen today at 10:45 AM',
-        avatar: 'https://ui-avatars.com/api/?name=Bob&background=00b2ff&color=fff&rounded=true&size=128'
-      }
-    },
-  ];
-
-  const initialMessages = {
-    1: [
-      { id: 101, text: 'Hey, how are you?', timestamp: '10:00 AM', sender: { id: 1, name: 'Alice' } },
-      { id: 102, text: 'I am good, thanks!', timestamp: '10:02 AM', sender: { id: 3, name: 'Me' } },
-    ],
-    2: [
-      { id: 201, text: "Let's catch up later.", timestamp: '11:15 AM', sender: { id: 2, name: 'Bob' } },
-    ],
-  };
-
+  const { user } = useAuth();
+  const { 
+    conversations, 
+    messages, 
+    loading, 
+    error,
+    isUserTyping,
+    fetchConversations, 
+    fetchConversation,
+    sendMessage,
+    sendTyping
+  } = useChat();
+  
   const [selectedConversation, setSelectedConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const currentUser = { id: 3, name: 'Me' };
+  const [currentMessages, setCurrentMessages] = useState([]);
+  
+  // Fetch conversations on component mount
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+  
+  // Update selected conversation when conversations change
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      handleSelectConversation(conversations[0]);
+    }
+  }, [conversations, selectedConversation]);
+  
+  // Update current messages when selected conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      const conversationMessages = messages[selectedConversation.id] || [];
+      setCurrentMessages(conversationMessages);
+      
+      // Fetch conversation messages if not already loaded
+      if (conversationMessages.length === 0) {
+        fetchConversation(selectedConversation.id);
+      }
+    }
+  }, [selectedConversation, messages, fetchConversation]);
 
   const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
-    const convoMessages = initialMessages[conversation.id] || [];
-    setMessages(convoMessages);
   };
 
-  const handleSendMessage = (text) => {
+  const handleSendMessage = async (text) => {
     if (!selectedConversation) return;
-    const newMessage = {
-      id: new Date().getTime(),
-      text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sender: currentUser,
-    };
-    setMessages(prevMessages => [...prevMessages, newMessage]);
-  };
-
-  // Auto-select first conversation if none selected
-  useEffect(() => {
-    if (!selectedConversation && defaultConversations.length > 0) {
-      handleSelectConversation(defaultConversations[0]);
+    
+    try {
+      await sendMessage(selectedConversation.id, text);
+    } catch (error) {
+      console.error('Failed to send message:', error);
     }
-  }, []);
+  };
+  
+  const handleTyping = (isTyping) => {
+    if (!selectedConversation) return;
+    sendTyping(selectedConversation.id, isTyping);
+  };
+  
+  // Check if the selected contact is typing
+  const isContactTyping = selectedConversation ? 
+    isUserTyping(selectedConversation.id) : false;
+  
+  // Format conversations for display
+  const formattedConversations = conversations.map(convo => {
+    // Get the last message
+    const lastMsg = convo.lastMessage || {};
+    
+    // Format timestamp
+    const timestamp = lastMsg.created_at 
+      ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
+    
+    // Get contact info from sender or receiver
+    const contact = {
+      id: convo.id,
+      name: 'Unknown User', // This should be replaced with actual user data
+      status: 'Online', // This should be replaced with actual status
+      avatar: `https://ui-avatars.com/api/?name=${convo.id}&background=4ead7c&color=fff&rounded=true&size=128`
+    };
+    
+    return {
+      id: convo.id,
+      title: `Conversation with ${contact.name}`,
+      lastMessage: lastMsg.content || 'No messages yet',
+      timestamp,
+      contact
+    };
+  });
 
   return (
     <div className="messaging-container">
       <div className="sidebar">
+        {loading && <div className="loading-indicator">Loading conversations...</div>}
+        {error && <div className="error-message">{error}</div>}
+        
         <ConversationsList
-          conversations={defaultConversations}
+          conversations={formattedConversations}
           onSelectConversation={handleSelectConversation}
+          selectedId={selectedConversation?.id}
         />
       </div>
       <div className="chat-section">
@@ -89,10 +123,16 @@ const Messaging = () => {
               </div>
             </div>
             <div className="chat-messages-container">
-              <ChatWindow messages={messages} currentUser={currentUser} />
+              {loading && <div className="loading-indicator">Loading messages...</div>}
+              {error && <div className="error-message">{error}</div>}
               
-              {/* Typing indicator - shown conditionally */}
-              {Math.random() > 0.7 && (
+              <ChatWindow 
+                messages={currentMessages} 
+                currentUser={user} 
+              />
+              
+              {/* Typing indicator - shown when contact is typing */}
+              {isContactTyping && (
                 <div className="typing-indicator">
                   <span></span>
                   <span></span>
@@ -100,7 +140,10 @@ const Messaging = () => {
                 </div>
               )}
             </div>
-            <MessageInput onSendMessage={handleSendMessage} />
+            <MessageInput 
+              onSendMessage={handleSendMessage} 
+              onTyping={handleTyping}
+            />
           </>
         ) : (
           <p>Please select a conversation</p>

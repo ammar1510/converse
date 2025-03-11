@@ -18,6 +18,7 @@ import (
 	"github.com/ammar1510/converse/internal/api"
 	"github.com/ammar1510/converse/internal/auth"
 	"github.com/ammar1510/converse/internal/database"
+	"github.com/ammar1510/converse/internal/websocket"
 )
 
 func main() {
@@ -104,6 +105,13 @@ func main() {
 	authHandler := api.NewAuthHandler(db)
 	messageHandler := api.NewMessageHandler(db)
 
+	// Initialize WebSocket manager
+	wsManager := websocket.NewManager()
+	go wsManager.Run()
+
+	// Set the WebSocket manager in the messages package
+	api.WSManager = wsManager
+
 	// Set up API routes
 	// Public routes (no authentication required)
 	router.POST("/api/auth/register", authHandler.Register)
@@ -120,6 +128,9 @@ func main() {
 		authorized.GET("/messages", messageHandler.GetMessages)
 		authorized.GET("/messages/conversation/:userID", messageHandler.GetConversation)
 		authorized.PUT("/messages/:messageID/read", messageHandler.MarkMessageAsRead)
+
+		// WebSocket route
+		authorized.GET("/ws", wsManager.HandleWebSocket)
 
 		// More protected routes can be added here
 	}
