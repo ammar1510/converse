@@ -1,4 +1,5 @@
-import { API_URL } from '../config';
+import { API_URL, WS_URL } from '../config';
+import { getToken } from '../utils/tokenStorage';
 
 /**
  * Service for managing WebSocket connections and real-time messaging
@@ -11,10 +12,12 @@ class WebSocketService {
     this.maxReconnectAttempts = 5;
     this.reconnectTimeout = null;
     this.isConnecting = false;
+    this.currentToken = null;
+    this.tokenRefreshInProgress = false;
     
-    // Convert HTTP/HTTPS to WS/WSS
-    const wsProtocol = API_URL.startsWith('https') ? 'wss' : 'ws';
-    this.wsUrl = API_URL.replace(/^https?:\/\//, `${wsProtocol}://`) + '/ws';
+    // Hardcode the correct WebSocket URL
+    this.wsUrl = 'ws://localhost:8080/api/ws';
+    console.log('WebSocket URL base (hardcoded):', this.wsUrl);
   }
   
   /**
@@ -22,28 +25,38 @@ class WebSocketService {
    * @param {string} token - JWT authentication token
    */
   connect(token) {
-    if (this.socket || this.isConnecting) {
+    if (!token) {
+      console.error('Cannot connect to WebSocket: No token provided');
       return;
     }
     
+    if (this.socket || this.isConnecting) {
+      console.log('WebSocket already connected or connecting');
+      
+      // If the token has changed, disconnect and reconnect with the new token
+      if (token !== this.currentToken) {
+        console.log('Token has changed, reconnecting with new token');
+        this.disconnect();
+      } else {
+        return;
+      }
+    }
+    
+    this.currentToken = token;
     this.isConnecting = true;
+    console.log('Initializing WebSocket connection');
     
     try {
-      // Add token to WebSocket URL as a query parameter for servers that don't support custom headers
-      // AND include it in the protocol for browsers that support it
-      const wsUrlWithToken = `${this.wsUrl}`;
+      // Add token as URL parameter for authentication
+      const wsUrlWithToken = `${this.wsUrl}?token=${encodeURIComponent(token)}`;
+      console.log('Connecting to WebSocket URL with token parameter:', wsUrlWithToken);
       
-      // Create WebSocket with token in protocol (supported by most browsers)
-      this.socket = new WebSocket(wsUrlWithToken, ['jwt', token]);
-      
-      // Set up custom headers for the WebSocket connection
-      // Note: This is only supported in some environments and may not work in all browsers
-      if (this.socket.setRequestHeader) {
-        this.socket.setRequestHeader('Authorization', `Bearer ${token}`);
-      }
+      // Create WebSocket connection
+      this.socket = new WebSocket(wsUrlWithToken);
+      console.log('WebSocket created with URL parameter');
       
       this.socket.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connection opened');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         
@@ -53,14 +66,17 @@ class WebSocketService {
           type: 'auth',
           token: token
         }));
+        console.log('Sent authentication message');
         
         // Dispatch connect event
         this.dispatchEvent('connect', {});
       };
       
       this.socket.onmessage = (event) => {
+        console.log('WebSocket message received:', event.data);
         try {
           const data = JSON.parse(event.data);
+          console.log('Parsed WebSocket message:', data);
           this.dispatchEvent(data.type || 'message', data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -69,13 +85,30 @@ class WebSocketService {
       
       this.socket.onclose = (event) => {
         console.log(`WebSocket disconnected: ${event.code} ${event.reason}`);
+        const wasConnected = this.socket !== null;
         this.socket = null;
         this.isConnecting = false;
+        
+        // Dispatch disconnect event
         this.dispatchEvent('disconnect', { code: event.code, reason: event.reason });
         
-        // Attempt to reconnect if not closed cleanly
-        if (event.code !== 1000) {
-          this.attemptReconnect(token);
+        // Don't attempt to reconnect if we're intentionally disconnecting (code 1000)
+        // or if we've reached max reconnect attempts
+        if (event.code === 1000) {
+          console.log('Clean disconnect, not attempting to reconnect');
+          return;
+        }
+        
+        // For authentication errors (1006 often indicates auth issues) or other errors,
+        // try to refresh the token and reconnect
+        console.log(`Abnormal close (${event.code}), attempting to refresh connection`);
+        
+        // Only try to refresh if we were previously connected
+        // This prevents infinite reconnection loops
+        if (wasConnected || this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.refreshConnection();
+        } else {
+          console.log('Max reconnect attempts reached, giving up');
         }
       };
       
@@ -87,6 +120,46 @@ class WebSocketService {
       console.error('Failed to create WebSocket connection:', error);
       this.isConnecting = false;
       this.attemptReconnect(token);
+    }
+  }
+  
+  /**
+   * Attempt to refresh the connection with a new token
+   */
+  refreshConnection() {
+    if (this.tokenRefreshInProgress) {
+      return;
+    }
+    
+    this.tokenRefreshInProgress = true;
+    
+    // Get the latest token from storage
+    const freshToken = getToken();
+    
+    console.log('Token refresh attempt:', { 
+      hasCurrentToken: !!this.currentToken,
+      hasFreshToken: !!freshToken,
+      tokensMatch: this.currentToken === freshToken,
+      tokenLength: freshToken ? freshToken.length : 0
+    });
+    
+    if (freshToken) {
+      // Always reconnect with the token from storage, even if it appears to be the same
+      // This handles cases where the token might be the same string but invalid on the server
+      console.log('Refreshing WebSocket connection with token from storage');
+      this.currentToken = freshToken;
+      
+      // Force disconnect before reconnecting
+      this.disconnect();
+      
+      // Small delay to ensure disconnect completes
+      setTimeout(() => {
+        this.connect(freshToken);
+        this.tokenRefreshInProgress = false;
+      }, 500);
+    } else {
+      console.log('No token available for refresh - user may be logged out');
+      this.tokenRefreshInProgress = false;
     }
   }
   
@@ -105,6 +178,8 @@ class WebSocketService {
     }
     
     this.isConnecting = false;
+    this.currentToken = null;
+    this.reconnectAttempts = 0;
   }
   
   /**
@@ -161,7 +236,9 @@ class WebSocketService {
    * @param {object} data - Event data
    */
   dispatchEvent(event, data) {
+    console.log(`Dispatching ${event} event:`, data);
     if (this.listeners[event]) {
+      console.log(`Found ${this.listeners[event].length} listeners for ${event} event`);
       this.listeners[event].forEach(callback => {
         try {
           callback(data);
@@ -169,6 +246,8 @@ class WebSocketService {
           console.error(`Error in ${event} event handler:`, error);
         }
       });
+    } else {
+      console.log(`No listeners found for ${event} event`);
     }
   }
   
@@ -227,6 +306,18 @@ class WebSocketService {
    */
   isConnected() {
     return this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+  
+  /**
+   * Reset the WebSocket connection state
+   * This should be called when the user logs out
+   */
+  reset() {
+    this.disconnect();
+    this.listeners = {};
+    this.currentToken = null;
+    this.reconnectAttempts = 0;
+    this.tokenRefreshInProgress = false;
   }
 }
 

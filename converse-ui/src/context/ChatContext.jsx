@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { useAuth } from './AuthContext';
 import websocketService from '../services/websocketService';
 import messageService from '../services/messageService';
+import { getToken } from '../utils/tokenStorage';
 
 // Create context
 const ChatContext = createContext();
@@ -10,69 +11,100 @@ const ChatContext = createContext();
  * ChatProvider component to manage chat state and WebSocket events
  */
 export const ChatProvider = ({ children }) => {
-  const { isAuthenticated, token, user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState({});
   const [conversations, setConversations] = useState([]);
+  const [users, setUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Get token directly from storage to ensure it's always current
+  const token = getToken();
 
   // Connect to WebSocket when authenticated
   useEffect(() => {
-    if (isAuthenticated && token) {
-      // Connect to WebSocket
-      websocketService.connect(token);
-      
-      // Set up event listeners
-      const handleConnect = () => {
-        setIsConnected(true);
-        setError(null);
-      };
-      
-      const handleDisconnect = () => {
-        setIsConnected(false);
-      };
-      
-      const handleMessage = (data) => {
-        // Add new message to state
-        setMessages(prev => {
-          const conversationId = data.sender_id === user?.id ? data.receiver_id : data.sender_id;
-          const conversationMessages = [...(prev[conversationId] || [])];
-          
-          // Check if message already exists to avoid duplicates
-          if (!conversationMessages.some(msg => msg.id === data.id)) {
-            conversationMessages.push(data);
-          }
-          
-          return {
-            ...prev,
-            [conversationId]: conversationMessages
-          };
-        });
+    // Always get the latest token from storage
+    const currentToken = getToken();
+    
+    console.log('WebSocket connection effect triggered', { 
+      isAuthenticated, 
+      hasToken: !!currentToken, 
+      tokenLength: currentToken ? currentToken.length : 0,
+      userId: user?.id 
+    });
+    
+    // Clear any existing listeners to prevent duplicates
+    const clearListeners = () => {
+      websocketService.removeEventListener('connect', handleConnect);
+      websocketService.removeEventListener('disconnect', handleDisconnect);
+      websocketService.removeEventListener('message', handleMessage);
+      websocketService.removeEventListener('typing', handleTyping);
+      websocketService.removeEventListener('error', handleError);
+    };
+    
+    // Define event handlers
+    const handleConnect = () => {
+      console.log('WebSocket connected successfully');
+      setIsConnected(true);
+      setError(null);
+    };
+    
+    const handleDisconnect = () => {
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+    };
+    
+    const handleMessage = (data) => {
+      console.log('WebSocket message received:', data);
+      // Add new message to state
+      setMessages(prev => {
+        const conversationId = data.sender_id === user?.id ? data.receiver_id : data.sender_id;
+        const conversationMessages = [...(prev[conversationId] || [])];
         
-        // Update conversations list
-        updateConversationWithMessage(data);
-      };
-      
-      const handleTyping = (data) => {
-        if (data.is_typing) {
-          setTypingUsers(prev => ({
-            ...prev,
-            [data.sender_id]: Date.now()
-          }));
-        } else {
-          setTypingUsers(prev => {
-            const newState = { ...prev };
-            delete newState[data.sender_id];
-            return newState;
-          });
+        // Check if message already exists to avoid duplicates
+        if (!conversationMessages.some(msg => msg.id === data.id)) {
+          conversationMessages.push(data);
+          // Sort messages by timestamp (oldest first)
+          conversationMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         }
-      };
+        
+        return {
+          ...prev,
+          [conversationId]: conversationMessages
+        };
+      });
       
-      const handleError = (data) => {
-        setError(`WebSocket error: ${data.message || 'Unknown error'}`);
-      };
+      // Update conversations list
+      updateConversationWithMessage(data);
+    };
+    
+    const handleTyping = (data) => {
+      if (data.is_typing) {
+        setTypingUsers(prev => ({
+          ...prev,
+          [data.sender_id]: Date.now()
+        }));
+      } else {
+        setTypingUsers(prev => {
+          const newState = { ...prev };
+          delete newState[data.sender_id];
+          return newState;
+        });
+      }
+    };
+    
+    const handleError = (data) => {
+      setError(`WebSocket error: ${data.message || 'Unknown error'}`);
+    };
+    
+    if (isAuthenticated && currentToken && user?.id) {
+      // Clear any existing listeners first
+      clearListeners();
+      
+      // Disconnect any existing connection first
+      websocketService.disconnect();
       
       // Add event listeners
       websocketService.addEventListener('connect', handleConnect);
@@ -81,21 +113,28 @@ export const ChatProvider = ({ children }) => {
       websocketService.addEventListener('typing', handleTyping);
       websocketService.addEventListener('error', handleError);
       
+      // Connect to WebSocket with current token
+      console.log('Connecting to WebSocket with current token');
+      websocketService.connect(currentToken);
+      
       // Fetch initial conversations
       fetchConversations();
       
-      // Clean up on unmount
+      // Clean up on unmount or when dependencies change
       return () => {
-        websocketService.removeEventListener('connect', handleConnect);
-        websocketService.removeEventListener('disconnect', handleDisconnect);
-        websocketService.removeEventListener('message', handleMessage);
-        websocketService.removeEventListener('typing', handleTyping);
-        websocketService.removeEventListener('error', handleError);
-        
-        websocketService.disconnect();
+        console.log('Cleaning up WebSocket event listeners');
+        clearListeners();
       };
+    } else if (!isAuthenticated) {
+      // Ensure WebSocket is disconnected when not authenticated
+      console.log('Not authenticated, disconnecting WebSocket');
+      websocketService.disconnect();
+      setIsConnected(false);
+      
+      // Clear any existing listeners
+      clearListeners();
     }
-  }, [isAuthenticated, token, user?.id]);
+  }, [isAuthenticated, user?.id]); // Remove token from dependencies to avoid reconnecting when token reference changes
   
   /**
    * Fetch all conversations for the current user
@@ -115,7 +154,11 @@ export const ChatProvider = ({ children }) => {
       // Organize messages by conversation
       const messagesByConversation = {};
       processedConversations.forEach(convo => {
-        messagesByConversation[convo.id] = convo.messages;
+        // Sort messages by timestamp (oldest first)
+        const sortedMessages = [...convo.messages].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
+        messagesByConversation[convo.id] = sortedMessages;
       });
       
       setMessages(messagesByConversation);
@@ -140,9 +183,14 @@ export const ChatProvider = ({ children }) => {
       
       const conversationData = await messageService.getConversation(userId);
       
+      // Sort messages by timestamp (oldest first)
+      const sortedConversationData = [...conversationData].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      
       setMessages(prev => ({
         ...prev,
-        [userId]: conversationData
+        [userId]: sortedConversationData
       }));
       
       // Mark unread messages as read
@@ -184,6 +232,8 @@ export const ChatProvider = ({ children }) => {
       // Update local state
       setMessages(prev => {
         const conversationMessages = [...(prev[receiverId] || []), newMessage];
+        // Sort messages by timestamp (oldest first)
+        conversationMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         return {
           ...prev,
           [receiverId]: conversationMessages
@@ -265,6 +315,33 @@ export const ChatProvider = ({ children }) => {
     return Date.now() - timestamp < 3000;
   }, [typingUsers]);
   
+  /**
+   * Fetch all users from the API
+   */
+  const fetchUsers = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const usersData = await messageService.getAllUsers();
+      setUsers(usersData);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+      setError('Failed to load users. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch users when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUsers();
+    }
+  }, [isAuthenticated, fetchUsers]);
+  
   // Context value
   const value = {
     isConnected,
@@ -272,8 +349,11 @@ export const ChatProvider = ({ children }) => {
     error,
     conversations,
     messages,
+    users,
+    typingUsers,
     fetchConversations,
     fetchConversation,
+    fetchUsers,
     sendMessage,
     sendTyping,
     isUserTyping

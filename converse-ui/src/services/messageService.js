@@ -5,6 +5,15 @@ import api from './api';
  */
 export const messageService = {
   /**
+   * Get all users except the current user
+   * @returns {Promise} Promise with users data
+   */
+  getAllUsers: async () => {
+    const response = await api.get('/users');
+    return response.data;
+  },
+
+  /**
    * Get all messages for the current user
    * @returns {Promise} Promise with messages data
    */
