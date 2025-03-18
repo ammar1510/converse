@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,15 +14,33 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 
 	"github.com/ammar1510/converse/internal/api"
 	"github.com/ammar1510/converse/internal/auth"
 	"github.com/ammar1510/converse/internal/database"
-	"github.com/ammar1510/converse/internal/websocket"
+	internalWs "github.com/ammar1510/converse/internal/websocket"
 )
 
 func main() {
+	// Set up logging to file
+	logFile, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+
+	// Configure log to write to both file and console
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(multiWriter)
+
+	// Add timestamps to log entries
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	log.Println("Server logging initialized - output directed to console and server.log")
+
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
@@ -106,7 +125,7 @@ func main() {
 	messageHandler := api.NewMessageHandler(db)
 
 	// Initialize WebSocket manager
-	wsManager := websocket.NewManager()
+	wsManager := internalWs.NewManager()
 	go wsManager.Run()
 
 	// Set the WebSocket manager in the messages package
@@ -122,6 +141,7 @@ func main() {
 	authorized.Use(api.AuthMiddleware())
 	{
 		authorized.GET("/auth/me", authHandler.GetMe)
+		authorized.GET("/users", authHandler.GetAllUsers)
 
 		// Message routes
 		authorized.POST("/messages", messageHandler.SendMessage)
@@ -129,8 +149,56 @@ func main() {
 		authorized.GET("/messages/conversation/:userID", messageHandler.GetConversation)
 		authorized.PUT("/messages/:messageID/read", messageHandler.MarkMessageAsRead)
 
-		// WebSocket route
-		authorized.GET("/ws", wsManager.HandleWebSocket)
+		// WebSocket route with special middleware for token in URL parameter
+		authorized.GET("/ws", func(c *gin.Context) {
+			remoteAddr := c.Request.RemoteAddr
+			log.Printf("[WebSocket] Connection request received from %s", remoteAddr)
+
+			// Check for token in URL parameter
+			tokenParam := c.Query("token")
+			if tokenParam != "" {
+				tokenPreview := tokenParam
+				if len(tokenParam) > 10 {
+					tokenPreview = tokenParam[:10] + "..." // Show only first 10 chars for security
+				}
+				log.Printf("[WebSocket] Found token in URL parameter from %s: %s", remoteAddr, tokenPreview)
+
+				// Validate token from query parameter
+				claims, err := auth.ValidateToken(tokenParam)
+				if err == nil {
+					log.Printf("[WebSocket] Token validated successfully for %s", remoteAddr)
+					// Parse user ID string into UUID
+					if userUUID, err := uuid.Parse(claims.UserID); err == nil {
+						log.Printf("[WebSocket] User authenticated from URL parameter: %s (IP: %s)", userUUID, remoteAddr)
+						// Set user ID and username in context
+						c.Set("userID", userUUID)
+						c.Set("username", claims.Username)
+						// Continue to WebSocket handler
+						wsManager.HandleWebSocket(c)
+						return
+					} else {
+						log.Printf("[WebSocket] Failed to parse user ID from token for %s: %v", remoteAddr, err)
+					}
+				} else {
+					log.Printf("[WebSocket] Token validation failed for %s: %v", remoteAddr, err)
+				}
+			} else {
+				log.Printf("[WebSocket] No token found in URL parameter for %s", remoteAddr)
+			}
+
+			// If no valid token in URL parameter, try normal auth middleware
+			// This will check for Authorization header
+			if _, exists := c.Get("userID"); exists {
+				log.Printf("User already authenticated by middleware")
+				// User is already authenticated by the auth middleware
+				wsManager.HandleWebSocket(c)
+				return
+			}
+
+			// No valid authentication found
+			log.Printf("No valid authentication found, returning unauthorized")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		})
 
 		// More protected routes can be added here
 	}
@@ -138,6 +206,88 @@ func main() {
 	// Add health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Add test log endpoint
+	router.GET("/test-log", func(c *gin.Context) {
+		log.Println("Test log entry - this should appear in server.log")
+		c.JSON(http.StatusOK, gin.H{"message": "Log test triggered"})
+	})
+
+	// Public WebSocket test endpoint (no auth required)
+	router.GET("/ws-public", func(c *gin.Context) {
+		fmt.Println("==== Public WebSocket endpoint hit ====")
+		fmt.Printf("Request from: %s\n", c.Request.RemoteAddr)
+		fmt.Printf("Method: %s\n", c.Request.Method)
+		fmt.Printf("Protocol: %s\n", c.Request.Proto)
+
+		// Log all headers
+		fmt.Println("Headers:")
+		for name, values := range c.Request.Header {
+			for _, value := range values {
+				fmt.Printf("  %s: %s\n", name, value)
+			}
+		}
+
+		// Check if it's a WebSocket upgrade request
+		if c.GetHeader("Upgrade") != "websocket" {
+			fmt.Println("Non-WebSocket request received")
+			c.String(http.StatusOK, "WebSocket endpoint is working, but you need to connect with a WebSocket client")
+			return
+		}
+
+		// Upgrade HTTP connection to WebSocket
+		upgrader := websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				fmt.Printf("Checking origin: %s\n", r.Header.Get("Origin"))
+				return true // Allow all origins
+			},
+		}
+
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			fmt.Printf("Failed to upgrade connection: %v\n", err)
+			return
+		}
+
+		fmt.Println("Connection upgraded successfully")
+
+		// Send a test message
+		err = conn.WriteMessage(websocket.TextMessage, []byte("Hello from server"))
+		if err != nil {
+			fmt.Printf("Error writing message: %v\n", err)
+		}
+
+		// Keep the connection open for a while
+		time.Sleep(5 * time.Second)
+
+		// Close after sending
+		conn.Close()
+		fmt.Println("Connection closed")
+	})
+
+	// Root WebSocket endpoint
+	router.GET("/socket", func(c *gin.Context) {
+		fmt.Println("==== Root WebSocket endpoint hit ====")
+
+		upgrader := websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		}
+
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			fmt.Printf("Failed to upgrade connection: %v\n", err)
+			return
+		}
+
+		fmt.Println("Root socket connection upgraded successfully")
+		conn.WriteMessage(websocket.TextMessage, []byte("Hello from root socket"))
 	})
 
 	// Get server port from environment variable or use default

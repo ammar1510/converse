@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -308,4 +309,55 @@ func (db *PostgresDB) Close() error {
 // Exec executes a query without returning any rows
 func (db *PostgresDB) Exec(query string, args ...interface{}) (ExecResult, error) {
 	return db.DB.Exec(query, args...)
+}
+
+// GetAllUsers retrieves all users except the specified user
+func (db *PostgresDB) GetAllUsers(excludeUserID uuid.UUID) ([]*models.User, error) {
+	query := `
+		SELECT id, username, email, password_hash, display_name, avatar_url, created_at, last_seen
+		FROM users
+		WHERE id != $1
+		ORDER BY username
+	`
+
+	rows, err := db.Query(query, excludeUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*models.User
+	for rows.Next() {
+		var user models.User
+		var displayName, avatarURL sql.NullString
+
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.Email,
+			&user.PasswordHash,
+			&displayName,
+			&avatarURL,
+			&user.CreatedAt,
+			&user.LastSeen,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user row: %w", err)
+		}
+
+		if displayName.Valid {
+			user.DisplayName = displayName.String
+		}
+		if avatarURL.Valid {
+			user.AvatarURL = avatarURL.String
+		}
+
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating user rows: %w", err)
+	}
+
+	return users, nil
 }

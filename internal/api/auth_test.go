@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ammar1510/converse/internal/auth"
 	"github.com/ammar1510/converse/internal/database"
@@ -305,4 +306,83 @@ func TestGetMe(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetAllUsers tests the GetAllUsers endpoint
+func TestGetAllUsers(t *testing.T) {
+	// Create a mock database
+	mockDB := new(MockDB)
+
+	// Create test users
+	currentUser := &models.User{
+		ID:       uuid.New(),
+		Username: "currentuser",
+		Email:    "current@example.com",
+	}
+
+	otherUsers := []*models.User{
+		{
+			ID:        uuid.New(),
+			Username:  "user1",
+			Email:     "user1@example.com",
+			CreatedAt: time.Now(),
+		},
+		{
+			ID:        uuid.New(),
+			Username:  "user2",
+			Email:     "user2@example.com",
+			CreatedAt: time.Now(),
+		},
+	}
+
+	// Set up expectations
+	mockDB.On("GetAllUsers", currentUser.ID).Return(otherUsers, nil)
+
+	// Create a new auth handler with the mock DB
+	handler := NewAuthHandler(mockDB)
+
+	// Set up the router
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Add the route with middleware that sets the user ID
+	router.GET("/api/users", func(c *gin.Context) {
+		// Simulate auth middleware by setting user ID in context
+		c.Set("userID", currentUser.ID)
+		c.Next()
+	}, handler.GetAllUsers)
+
+	// Create a test request
+	req, _ := http.NewRequest("GET", "/api/users", nil)
+	resp := httptest.NewRecorder()
+
+	// Serve the request
+	router.ServeHTTP(resp, req)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, resp.Code)
+
+	// Parse the response body
+	var users []*models.UserResponse
+	err := json.Unmarshal(resp.Body.Bytes(), &users)
+	assert.NoError(t, err)
+
+	// Verify the response
+	assert.Len(t, users, 2)
+	assert.Equal(t, otherUsers[0].ID, users[0].ID)
+	assert.Equal(t, otherUsers[0].Username, users[0].Username)
+	assert.Equal(t, otherUsers[1].ID, users[1].ID)
+	assert.Equal(t, otherUsers[1].Username, users[1].Username)
+
+	// Verify that the mock expectations were met
+	mockDB.AssertExpectations(t)
+}
+
+// GetAllUsers mocks retrieving all users except the specified user
+func (m *MockDB) GetAllUsers(excludeUserID uuid.UUID) ([]*models.User, error) {
+	args := m.Called(excludeUserID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
 }

@@ -14,6 +14,7 @@ type DBInterface interface {
 	GetUserByEmail(email string) (*models.User, error)
 	GetUserByID(id uuid.UUID) (*models.User, error)
 	UpdateLastSeen(userID uuid.UUID) error
+	GetAllUsers(excludeUserID uuid.UUID) ([]*models.User, error)
 
 	// Message methods
 	CreateMessage(senderID, receiverID uuid.UUID, content string) (*models.Message, error)

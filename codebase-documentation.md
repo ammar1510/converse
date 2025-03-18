@@ -75,6 +75,10 @@ Implements authentication-related API endpoints.
   - Converts string ID to UUID
   - Fetches user data from database
   - Returns user profile data
+- **`GetAllUsers(c *gin.Context)`**: Retrieves all users except the current user
+  - Gets user ID from JWT context
+  - Fetches all other users from database
+  - Returns list of users without sensitive data
 
 ### auth_test.go
 Comprehensive tests for authentication endpoints.
@@ -91,6 +95,9 @@ Comprehensive tests for authentication endpoints.
 - **`TestGetMe`**: Tests profile retrieval
   - Valid token
   - Missing/invalid token
+- **`TestGetAllUsers`**: Tests retrieving all users
+  - Successful retrieval
+  - Authentication check
 
 ### messages.go
 Implements message-related API endpoints.
@@ -220,6 +227,7 @@ Defines the database interface and factory for different implementations.
   - User methods (CreateUser, GetUserByEmail, etc.)
   - Message methods (CreateMessage, GetMessagesByUser, etc.)
   - Common methods (Close, Exec)
+  - **`GetAllUsers(excludeUserID uuid.UUID)`**: Retrieves all users except the specified user
 - **`type DatabaseType string`**: Enum for supported database types
 - **`NewDatabase(dbType DatabaseType, connStr string)`**: Factory function for database implementations
 
@@ -232,6 +240,7 @@ PostgreSQL implementation of the database interface.
 - **`GetUserByEmail(email string)`**: Retrieves user by email
 - **`GetUserByID(id uuid.UUID)`**: Retrieves user by ID
 - **`UpdateLastSeen(userID uuid.UUID)`**: Updates user's last activity
+- **`GetAllUsers(excludeUserID uuid.UUID)`**: Retrieves all users except the specified user
 - **`CreateMessage(senderID, receiverID uuid.UUID, content string)`**: Creates new message
 - **`GetMessagesByUser(userID uuid.UUID)`**: Retrieves all messages for a user
 - **`GetMessageByID(messageID uuid.UUID)`**: Retrieves message by ID
@@ -246,6 +255,7 @@ Tests for PostgreSQL database operations.
 - **`TestGetUserByEmail`**: Tests user retrieval by email
 - **`TestGetUserByID`**: Tests user retrieval by ID
 - **`TestUpdateLastSeen`**: Tests last seen update
+- **`TestGetAllUsers`**: Tests retrieving all users except one
 - **`TestCreateMessage`**: Tests message creation
 - **`TestGetMessagesByUser`**: Tests message retrieval
 - **`TestGetConversation`**: Tests conversation retrieval
@@ -258,6 +268,8 @@ SQL schema definition for the database.
   - id, username, email, password_hash, display_name, avatar_url, created_at, last_seen
 - **`messages`**: Table for message data
   - id, sender_id, receiver_id, content, created_at, is_read, updated_at
+- **`friendships`**: Table for friendship relationships (prepared for future implementation)
+  - id, user_id, friend_id, status, created_at, updated_at
 
 ## Package: internal/models
 
@@ -386,6 +398,7 @@ Environment configuration file.
    - ✅ `TestLogin`: All cases pass
    - ✅ `TestAuthMiddleware`: All cases pass
    - ✅ `TestGetMe`: All cases pass
+   - ✅ `TestGetAllUsers`: All cases pass
    - ✅ `TestCreateMessage`: All cases pass
    - ✅ `TestGetMessages`: All cases pass
    - ✅ `TestGetConversation`: All cases pass
@@ -398,6 +411,7 @@ Environment configuration file.
    - ✅ `TestGetUserByEmail`: User retrieval by email
    - ✅ `TestGetUserByID`: User retrieval by ID
    - ✅ `TestUpdateLastSeen`: Last activity tracking
+   - ✅ `TestGetAllUsers`: User listing functionality
    - ✅ `TestCreateMessage`: Message creation
    - ✅ `TestGetMessagesByUser`: Message retrieval
    - ✅ `TestGetConversation`: Conversation retrieval
@@ -430,6 +444,7 @@ Environment configuration file.
    - ✅ WebSocket connections authenticate properly with JWT
    - ✅ Real-time message delivery works between connected clients
    - ✅ Health check endpoint confirms server status
+   - ✅ Get all users endpoint returns all users except the current user
 
 ### Environment Requirements
 - PostgreSQL database with user-specific credentials
@@ -465,6 +480,7 @@ converse-ui/
 │   │   └── messaging/           # Chat interface components
 │   │       ├── Messaging.jsx    # Main messaging container
 │   │       ├── ConversationsList.jsx # List of chat conversations
+│   │       ├── UsersList.jsx    # List of all users
 │   │       ├── ChatWindow.jsx   # Message display area
 │   │       └── MessageInput.jsx # Message input field
 │   ├── pages/                   # Page components
@@ -472,9 +488,12 @@ converse-ui/
 │   │   ├── RegisterPage.jsx     # Registration page
 │   │   └── ChatPage.jsx         # Main chat page
 │   ├── context/                 # React context providers
-│   │   └── AuthContext.jsx      # Authentication state management
+│   │   ├── AuthContext.jsx      # Authentication state management
+│   │   └── ChatContext.jsx      # Chat and user state management
 │   ├── services/                # API services
 │   │   ├── api.js               # REST API client
+│   │   ├── authService.js       # Authentication service
+│   │   ├── messageService.js    # Message and user service
 │   │   └── websocket.js         # WebSocket client with JWT authentication
 │   ├── utils/                   # Utility functions
 │   ├── routes/                  # Route definitions
@@ -500,7 +519,13 @@ converse-ui/
    - User welcome message with username display
    - Logout confirmation dialog to prevent accidental logouts
 
-3. **Messaging Interface**
+3. **User Management**
+   - View all users in the system
+   - Start conversations with any user
+   - Tab-based navigation between conversations and users
+   - User avatars and basic information display
+
+4. **Messaging Interface**
    - Conversation list with contact avatars and preview messages
    - Chat window with message bubbles and timestamps
    - Message input with send functionality
@@ -509,7 +534,7 @@ converse-ui/
    - Typing indicators for real-time feedback
    - Read receipts showing when messages are seen
 
-4. **WebSocket Integration**
+5. **WebSocket Integration**
    - Secure WebSocket connection with JWT authentication
    - Real-time message delivery
    - Typing indicators
@@ -517,12 +542,13 @@ converse-ui/
    - Automatic reconnection on disconnection
    - Read receipt notifications
 
-5. **Styling and User Experience**
+6. **Styling and User Experience**
    - Modern, clean UI with consistent color scheme
    - Responsive design that works on mobile and desktop
    - Animations for message appearance and typing indicators
    - Visual feedback for user interactions
    - Consistent styling across all components
+   - Tab-based interface for switching between views
 
 #### WebSocket Client Implementation
 
@@ -605,6 +631,52 @@ The WebSocket client implementation includes:
    };
    ```
 
+#### User List Implementation
+
+The user list component displays all users in the system and allows starting conversations with any user:
+
+```javascript
+const UsersList = ({ users, onSelectUser }) => {
+  const [activeUser, setActiveUser] = useState(null);
+  
+  const handleSelectUser = (user) => {
+    setActiveUser(user.id);
+    onSelectUser(user);
+  };
+
+  return (
+    <div className="users-list">
+      <h3>All Users</h3>
+      {users.length === 0 ? (
+        <p className="no-users">No users found</p>
+      ) : (
+        <ul>
+          {users.map(user => (
+            <li 
+              key={user.id} 
+              className={`user-item ${activeUser === user.id ? 'active' : ''}`}
+              onClick={() => handleSelectUser(user)}
+            >
+              <div className="user-avatar">
+                <img 
+                  src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.username}`} 
+                  alt={user.username} 
+                />
+                <span className="online-indicator"></span>
+              </div>
+              <div className="user-content">
+                <div className="user-name">{user.display_name || user.username}</div>
+                <div className="user-email">{user.email}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+```
+
 ### Future UI Enhancements
 
 1. **Enhanced Real-time Features**
@@ -620,7 +692,13 @@ The WebSocket client implementation includes:
    - Theme selection (light/dark mode)
    - Notification system
 
-3. **Performance Optimizations**
+3. **User Relationship Management**
+   - Friend request system
+   - Contact list management
+   - Blocking unwanted users
+   - Privacy settings
+
+4. **Performance Optimizations**
    - Virtualized lists for better performance with large message histories
    - Lazy loading of images and media
    - Optimized rendering for mobile devices
