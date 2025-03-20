@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 
@@ -149,58 +149,20 @@ func main() {
 		authorized.GET("/messages/conversation/:userID", messageHandler.GetConversation)
 		authorized.PUT("/messages/:messageID/read", messageHandler.MarkMessageAsRead)
 
-		// WebSocket route with special middleware for token in URL parameter
-		authorized.GET("/ws", func(c *gin.Context) {
+		// More protected routes can be added here
+	}
+
+	// WebSocket route with TokenAuthMiddleware for accepting tokens in URL parameters
+	wsRoute := router.Group("/api")
+	wsRoute.Use(api.TokenAuthMiddleware())
+	{
+		wsRoute.GET("/ws", func(c *gin.Context) {
 			remoteAddr := c.Request.RemoteAddr
 			log.Printf("[WebSocket] Connection request received from %s", remoteAddr)
 
-			// Check for token in URL parameter
-			tokenParam := c.Query("token")
-			if tokenParam != "" {
-				tokenPreview := tokenParam
-				if len(tokenParam) > 10 {
-					tokenPreview = tokenParam[:10] + "..." // Show only first 10 chars for security
-				}
-				log.Printf("[WebSocket] Found token in URL parameter from %s: %s", remoteAddr, tokenPreview)
-
-				// Validate token from query parameter
-				claims, err := auth.ValidateToken(tokenParam)
-				if err == nil {
-					log.Printf("[WebSocket] Token validated successfully for %s", remoteAddr)
-					// Parse user ID string into UUID
-					if userUUID, err := uuid.Parse(claims.UserID); err == nil {
-						log.Printf("[WebSocket] User authenticated from URL parameter: %s (IP: %s)", userUUID, remoteAddr)
-						// Set user ID and username in context
-						c.Set("userID", userUUID)
-						c.Set("username", claims.Username)
-						// Continue to WebSocket handler
-						wsManager.HandleWebSocket(c)
-						return
-					} else {
-						log.Printf("[WebSocket] Failed to parse user ID from token for %s: %v", remoteAddr, err)
-					}
-				} else {
-					log.Printf("[WebSocket] Token validation failed for %s: %v", remoteAddr, err)
-				}
-			} else {
-				log.Printf("[WebSocket] No token found in URL parameter for %s", remoteAddr)
-			}
-
-			// If no valid token in URL parameter, try normal auth middleware
-			// This will check for Authorization header
-			if _, exists := c.Get("userID"); exists {
-				log.Printf("User already authenticated by middleware")
-				// User is already authenticated by the auth middleware
-				wsManager.HandleWebSocket(c)
-				return
-			}
-
-			// No valid authentication found
-			log.Printf("No valid authentication found, returning unauthorized")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			// Forward to the WebSocket handler after authentication
+			wsManager.HandleWebSocket(c)
 		})
-
-		// More protected routes can be added here
 	}
 
 	// Add health check endpoint
@@ -212,60 +174,6 @@ func main() {
 	router.GET("/test-log", func(c *gin.Context) {
 		log.Println("Test log entry - this should appear in server.log")
 		c.JSON(http.StatusOK, gin.H{"message": "Log test triggered"})
-	})
-
-	// Public WebSocket test endpoint (no auth required)
-	router.GET("/ws-public", func(c *gin.Context) {
-		fmt.Println("==== Public WebSocket endpoint hit ====")
-		fmt.Printf("Request from: %s\n", c.Request.RemoteAddr)
-		fmt.Printf("Method: %s\n", c.Request.Method)
-		fmt.Printf("Protocol: %s\n", c.Request.Proto)
-
-		// Log all headers
-		fmt.Println("Headers:")
-		for name, values := range c.Request.Header {
-			for _, value := range values {
-				fmt.Printf("  %s: %s\n", name, value)
-			}
-		}
-
-		// Check if it's a WebSocket upgrade request
-		if c.GetHeader("Upgrade") != "websocket" {
-			fmt.Println("Non-WebSocket request received")
-			c.String(http.StatusOK, "WebSocket endpoint is working, but you need to connect with a WebSocket client")
-			return
-		}
-
-		// Upgrade HTTP connection to WebSocket
-		upgrader := websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				fmt.Printf("Checking origin: %s\n", r.Header.Get("Origin"))
-				return true // Allow all origins
-			},
-		}
-
-		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-		if err != nil {
-			fmt.Printf("Failed to upgrade connection: %v\n", err)
-			return
-		}
-
-		fmt.Println("Connection upgraded successfully")
-
-		// Send a test message
-		err = conn.WriteMessage(websocket.TextMessage, []byte("Hello from server"))
-		if err != nil {
-			fmt.Printf("Error writing message: %v\n", err)
-		}
-
-		// Keep the connection open for a while
-		time.Sleep(5 * time.Second)
-
-		// Close after sending
-		conn.Close()
-		fmt.Println("Connection closed")
 	})
 
 	// Root WebSocket endpoint
@@ -285,9 +193,87 @@ func main() {
 			fmt.Printf("Failed to upgrade connection: %v\n", err)
 			return
 		}
+		defer conn.Close()
 
 		fmt.Println("Root socket connection upgraded successfully")
-		conn.WriteMessage(websocket.TextMessage, []byte("Hello from root socket"))
+
+		// Check for token in URL parameter
+		tokenParam := c.Query("token")
+		if tokenParam != "" {
+			tokenPreview := tokenParam
+			if len(tokenParam) > 10 {
+				tokenPreview = tokenParam[:10] + "..." // Show only first 10 chars for security
+			}
+			log.Printf("[Root WebSocket] Found token in URL parameter: %s", tokenPreview)
+
+			// Validate token
+			claims, err := auth.ValidateToken(tokenParam)
+			if err == nil {
+				log.Printf("[Root WebSocket] Token validated successfully for user: %s", claims.Username)
+				// Process authenticated connection using the WebSocketManager
+
+				// Send acknowledgment
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(`{"type":"connected","message":"Authenticated as %s"}`, claims.Username))); err != nil {
+					log.Printf("Error writing welcome message: %v", err)
+				}
+
+				// Simple echo handler
+				for {
+					messageType, message, err := conn.ReadMessage()
+					if err != nil {
+						if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+							fmt.Printf("Error reading message: %v\n", err)
+						}
+						break
+					}
+
+					// Parse message
+					var wsMessage map[string]interface{}
+					if err := json.Unmarshal(message, &wsMessage); err == nil {
+						// Add a timestamp
+						wsMessage["timestamp"] = time.Now().Format(time.RFC3339)
+						wsMessage["sender_id"] = claims.UserID
+
+						// Update the message
+						updatedMsg, _ := json.Marshal(wsMessage)
+						message = updatedMsg
+					}
+
+					// Echo the message back
+					if err := conn.WriteMessage(messageType, message); err != nil {
+						fmt.Printf("Error writing message: %v\n", err)
+						break
+					}
+				}
+
+				return
+			} else {
+				log.Printf("Root WebSocket: token validation failed: %v", err)
+			}
+		}
+
+		// Send a welcome message
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"connected","message":"Connected anonymously"}`)); err != nil {
+			fmt.Printf("Error writing message: %v\n", err)
+			return
+		}
+
+		// Simple echo handler for unauthenticated connections
+		for {
+			messageType, message, err := conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					fmt.Printf("Error reading message: %v\n", err)
+				}
+				break
+			}
+
+			// Echo the message back
+			if err := conn.WriteMessage(messageType, message); err != nil {
+				fmt.Printf("Error writing message: %v\n", err)
+				break
+			}
+		}
 	})
 
 	// Get server port from environment variable or use default

@@ -15,6 +15,7 @@ const Messaging = () => {
     loading, 
     error,
     isUserTyping,
+    isConnected,
     fetchConversations, 
     fetchConversation,
     fetchUsers,
@@ -35,7 +36,8 @@ const Messaging = () => {
   // Update selected conversation when conversations change
   useEffect(() => {
     if (!selectedConversation && conversations.length > 0) {
-      handleSelectConversation(conversations[0]);
+      // Just select the first conversation if none is selected
+      setSelectedConversation(conversations[0]);
     }
   }, [conversations, selectedConversation]);
   
@@ -45,12 +47,25 @@ const Messaging = () => {
       const conversationMessages = messages[selectedConversation.id] || [];
       setCurrentMessages(conversationMessages);
       
-      // Fetch conversation messages if not already loaded
+      // Only fetch if no messages loaded
       if (conversationMessages.length === 0) {
         fetchConversation(selectedConversation.id);
       }
     }
   }, [selectedConversation, messages, fetchConversation]);
+
+  // Periodic refresh of current conversation
+  useEffect(() => {
+    if (!selectedConversation) return;
+    
+    const refreshInterval = setInterval(() => {
+      fetchConversation(selectedConversation.id).catch(() => {
+        // Silently handle errors during background refresh
+      });
+    }, 15000); // Reduced frequency
+    
+    return () => clearInterval(refreshInterval);
+  }, [selectedConversation, fetchConversation]);
 
   const handleSelectConversation = (conversation) => {
     setSelectedConversation(conversation);
@@ -129,6 +144,11 @@ const Messaging = () => {
       <div className="sidebar">
         {loading && <div className="loading-indicator">Loading...</div>}
         {error && <div className="error-message">{error}</div>}
+        
+        {/* WebSocket Connection Status */}
+        <div className={`websocket-status ${isConnected ? 'connected' : 'disconnected'}`}>
+          {isConnected ? 'Connected' : 'Disconnected'}
+        </div>
         
         <div className="tabs">
           <button 

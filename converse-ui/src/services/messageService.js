@@ -28,7 +28,7 @@ export const messageService = {
    * @returns {Promise} Promise with conversation messages
    */
   getConversation: async (otherUserId) => {
-    const response = await api.get(`/conversation/${otherUserId}`);
+    const response = await api.get(`/messages/conversation/${otherUserId}`);
     return response.data;
   },
   
@@ -65,6 +65,12 @@ export const messageService = {
   processConversations: (messages, currentUserId) => {
     // Group messages by the other user (sender or receiver)
     const conversationsMap = {};
+    
+    // Add null check to prevent "Cannot read properties of null" error
+    if (!messages || !Array.isArray(messages)) {
+      console.warn('No messages to process or messages is not an array');
+      return [];
+    }
     
     messages.forEach(message => {
       // Determine the other user in the conversation

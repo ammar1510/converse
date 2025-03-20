@@ -65,7 +65,14 @@ func GenerateToken(user *models.User) (string, time.Time, error) {
 
 // ValidateToken validates a JWT token and returns the claims
 func ValidateToken(tokenString string) (*JWTClaims, error) {
-	log.Printf("[JWT] Validating token: %s...", tokenString[:10])
+	// Safe logging of token preview
+	if len(tokenString) > 10 {
+		log.Printf("[JWT] Validating token: %s...", tokenString[:10])
+	} else if len(tokenString) > 0 {
+		log.Printf("[JWT] Validating token: %s...", tokenString)
+	} else {
+		log.Printf("[JWT] Validating empty token")
+	}
 
 	claims := &JWTClaims{}
 

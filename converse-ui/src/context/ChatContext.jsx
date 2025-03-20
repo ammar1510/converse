@@ -23,41 +23,103 @@ export const ChatProvider = ({ children }) => {
   // Get token directly from storage to ensure it's always current
   const token = getToken();
 
+  /**
+   * Update conversations list with a new message
+   * @param {object} message - The new message
+   */
+  const updateConversationWithMessage = useCallback((message) => {
+    if (!user?.id) return;
+    
+    setConversations(prev => {
+      // Determine the conversation ID (the other user's ID)
+      const conversationId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
+      
+      // Find existing conversation
+      const existingIndex = prev.findIndex(c => c.id === conversationId);
+      
+      // Create a copy of the conversations array
+      const updatedConversations = [...prev];
+      
+      if (existingIndex >= 0) {
+        // Update existing conversation
+        const conversation = { ...updatedConversations[existingIndex] };
+        conversation.lastMessage = message;
+        conversation.lastMessageTime = message.created_at;
+        conversation.messages = [...(conversation.messages || []), message];
+        
+        // Remove from current position
+        updatedConversations.splice(existingIndex, 1);
+        // Add to the beginning (most recent)
+        updatedConversations.unshift(conversation);
+      } else {
+        // Create new conversation
+        updatedConversations.unshift({
+          id: conversationId,
+          messages: [message],
+          lastMessage: message,
+          lastMessageTime: message.created_at
+        });
+      }
+      
+      return updatedConversations;
+    });
+  }, [user?.id]);
+
+  /**
+   * Fetch all conversations for the current user
+   */
+  const fetchConversations = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const messagesData = await messageService.getMessages();
+      const processedConversations = messageService.processConversations(messagesData, user.id);
+      
+      setConversations(processedConversations);
+      
+      // Organize messages by conversation
+      const messagesByConversation = {};
+      processedConversations.forEach(convo => {
+        // Sort messages by timestamp (oldest first)
+        const sortedMessages = [...convo.messages].sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
+        messagesByConversation[convo.id] = sortedMessages;
+      });
+      
+      setMessages(messagesByConversation);
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+      setError('Failed to load conversations');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
   // Connect to WebSocket when authenticated
   useEffect(() => {
     // Always get the latest token from storage
     const currentToken = getToken();
     
-    console.log('WebSocket connection effect triggered', { 
-      isAuthenticated, 
-      hasToken: !!currentToken, 
-      tokenLength: currentToken ? currentToken.length : 0,
-      userId: user?.id 
-    });
-    
-    // Clear any existing listeners to prevent duplicates
-    const clearListeners = () => {
-      websocketService.removeEventListener('connect', handleConnect);
-      websocketService.removeEventListener('disconnect', handleDisconnect);
-      websocketService.removeEventListener('message', handleMessage);
-      websocketService.removeEventListener('typing', handleTyping);
-      websocketService.removeEventListener('error', handleError);
-    };
-    
     // Define event handlers
     const handleConnect = () => {
-      console.log('WebSocket connected successfully');
       setIsConnected(true);
       setError(null);
+      console.log('WebSocket connected successfully, will now fetch conversations');
+      // Fetch conversations whenever we connect to ensure latest data
+      fetchConversations();
     };
     
     const handleDisconnect = () => {
-      console.log('WebSocket disconnected');
       setIsConnected(false);
+      console.log('WebSocket disconnected');
     };
     
     const handleMessage = (data) => {
-      console.log('WebSocket message received:', data);
+      console.log('Received message in chat context:', data);
       // Add new message to state
       setMessages(prev => {
         const conversationId = data.sender_id === user?.id ? data.receiver_id : data.sender_id;
@@ -96,10 +158,21 @@ export const ChatProvider = ({ children }) => {
     };
     
     const handleError = (data) => {
+      console.error('WebSocket error in chat context:', data);
       setError(`WebSocket error: ${data.message || 'Unknown error'}`);
     };
     
+    // Clear any existing listeners to prevent duplicates
+    const clearListeners = () => {
+      websocketService.removeEventListener('connect', handleConnect);
+      websocketService.removeEventListener('disconnect', handleDisconnect);
+      websocketService.removeEventListener('message', handleMessage);
+      websocketService.removeEventListener('typing', handleTyping);
+      websocketService.removeEventListener('error', handleError);
+    };
+    
     if (isAuthenticated && currentToken && user?.id) {
+      console.log('User is authenticated. Setting up WebSocket connection...');
       // Clear any existing listeners first
       clearListeners();
       
@@ -114,61 +187,24 @@ export const ChatProvider = ({ children }) => {
       websocketService.addEventListener('error', handleError);
       
       // Connect to WebSocket with current token
-      console.log('Connecting to WebSocket with current token');
+      console.log('Connecting to WebSocket with token');
       websocketService.connect(currentToken);
-      
-      // Fetch initial conversations
-      fetchConversations();
       
       // Clean up on unmount or when dependencies change
       return () => {
-        console.log('Cleaning up WebSocket event listeners');
+        console.log('Cleaning up WebSocket connections');
         clearListeners();
       };
     } else if (!isAuthenticated) {
+      console.log('User is not authenticated, disconnecting WebSocket');
       // Ensure WebSocket is disconnected when not authenticated
-      console.log('Not authenticated, disconnecting WebSocket');
       websocketService.disconnect();
       setIsConnected(false);
       
       // Clear any existing listeners
       clearListeners();
     }
-  }, [isAuthenticated, user?.id]); // Remove token from dependencies to avoid reconnecting when token reference changes
-  
-  /**
-   * Fetch all conversations for the current user
-   */
-  const fetchConversations = useCallback(async () => {
-    if (!user?.id) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const messagesData = await messageService.getMessages();
-      const processedConversations = messageService.processConversations(messagesData, user.id);
-      
-      setConversations(processedConversations);
-      
-      // Organize messages by conversation
-      const messagesByConversation = {};
-      processedConversations.forEach(convo => {
-        // Sort messages by timestamp (oldest first)
-        const sortedMessages = [...convo.messages].sort(
-          (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        );
-        messagesByConversation[convo.id] = sortedMessages;
-      });
-      
-      setMessages(messagesByConversation);
-    } catch (err) {
-      console.error('Error fetching conversations:', err);
-      setError('Failed to load conversations');
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
+  }, [isAuthenticated, user?.id, fetchConversations, updateConversationWithMessage]);
   
   /**
    * Fetch messages for a specific conversation
@@ -249,48 +285,6 @@ export const ChatProvider = ({ children }) => {
       setError('Failed to send message');
       return null;
     }
-  }, [user?.id]);
-  
-  /**
-   * Update conversations list with a new message
-   * @param {object} message - The new message
-   */
-  const updateConversationWithMessage = useCallback((message) => {
-    if (!user?.id) return;
-    
-    setConversations(prev => {
-      // Determine the conversation ID (the other user's ID)
-      const conversationId = message.sender_id === user.id ? message.receiver_id : message.sender_id;
-      
-      // Find existing conversation
-      const existingIndex = prev.findIndex(c => c.id === conversationId);
-      
-      // Create a copy of the conversations array
-      const updatedConversations = [...prev];
-      
-      if (existingIndex >= 0) {
-        // Update existing conversation
-        const conversation = { ...updatedConversations[existingIndex] };
-        conversation.lastMessage = message;
-        conversation.lastMessageTime = message.created_at;
-        conversation.messages = [...(conversation.messages || []), message];
-        
-        // Remove from current position
-        updatedConversations.splice(existingIndex, 1);
-        // Add to the beginning (most recent)
-        updatedConversations.unshift(conversation);
-      } else {
-        // Create new conversation
-        updatedConversations.unshift({
-          id: conversationId,
-          messages: [message],
-          lastMessage: message,
-          lastMessageTime: message.created_at
-        });
-      }
-      
-      return updatedConversations;
-    });
   }, [user?.id]);
   
   /**

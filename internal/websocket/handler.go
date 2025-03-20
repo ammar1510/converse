@@ -14,7 +14,6 @@ import (
 
 // Message types
 const (
-	MessageTypeAuth    = "auth"
 	MessageTypeMessage = "message"
 	MessageTypeTyping  = "typing"
 )
@@ -42,7 +41,6 @@ type WebSocketMessage struct {
 	ReceiverID uuid.UUID `json:"receiver_id,omitempty"`
 	Content    string    `json:"content,omitempty"`
 	IsTyping   bool      `json:"is_typing,omitempty"`
-	Token      string    `json:"token,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
 }
 
@@ -120,7 +118,15 @@ func (m *Manager) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[WebSocket-Handler] User authenticated: %s (IP: %s)", userID, remoteAddr)
+	// Validate that userID is actually a uuid.UUID type
+	userUUID, ok := userID.(uuid.UUID)
+	if !ok {
+		log.Printf("[WebSocket-Handler] UserID in context is not a valid UUID, rejecting connection from %s", remoteAddr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user identification"})
+		return
+	}
+
+	log.Printf("[WebSocket-Handler] User authenticated: %s (IP: %s)", userUUID, remoteAddr)
 
 	// Upgrade HTTP connection to WebSocket
 	upgrader := websocket.Upgrader{
@@ -129,6 +135,7 @@ func (m *Manager) HandleWebSocket(c *gin.Context) {
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
 			log.Printf("[WebSocket-Handler] WebSocket origin: %s (IP: %s)", origin, remoteAddr)
+			// TODO: In production, implement proper origin checking
 			return true // Allow all origins in development
 		},
 	}
@@ -142,7 +149,7 @@ func (m *Manager) HandleWebSocket(c *gin.Context) {
 	log.Printf("[WebSocket-Handler] Connection upgraded successfully for %s", remoteAddr)
 
 	client := &Client{
-		ID:     userID.(uuid.UUID),
+		ID:     userUUID,
 		Socket: conn,
 		Send:   make(chan []byte, 256),
 	}
@@ -165,7 +172,7 @@ func (c *Client) readPump(m *Manager) {
 		c.Socket.Close()
 	}()
 
-	c.Socket.SetReadLimit(512 * 1024) // 512KB
+	c.Socket.SetReadLimit(64 * 1024) // Reduced from 512KB to 64KB for most chat messages
 	c.Socket.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.Socket.SetPongHandler(func(string) error {
 		c.Socket.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -175,7 +182,24 @@ func (c *Client) readPump(m *Manager) {
 
 	log.Printf("[WebSocket-ReadPump] Started read pump for client %s", c.ID)
 
+	// Implement a simple rate limiting mechanism
+	messageCount := 0
+	lastResetTime := time.Now()
+	const maxMessagesPerMinute = 60 // Adjust as needed
+
 	for {
+		// Rate limiting check
+		if messageCount >= maxMessagesPerMinute {
+			if time.Since(lastResetTime) < time.Minute {
+				log.Printf("[WebSocket-ReadPump] Rate limit exceeded for client %s", c.ID)
+				time.Sleep(time.Second) // Sleep briefly before checking again
+				continue
+			}
+			// Reset counter after a minute
+			messageCount = 0
+			lastResetTime = time.Now()
+		}
+
 		_, message, err := c.Socket.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -186,10 +210,22 @@ func (c *Client) readPump(m *Manager) {
 			break
 		}
 
+		messageCount++ // Increment message counter for rate limiting
+
 		// Process the message
 		var wsMessage WebSocketMessage
 		if err := json.Unmarshal(message, &wsMessage); err != nil {
 			log.Printf("[WebSocket-ReadPump] Error unmarshaling message from client %s: %v", c.ID, err)
+
+			// Send error message to client
+			errMsg := WebSocketMessage{
+				Type:      "error",
+				Content:   "Invalid message format",
+				Timestamp: time.Now(),
+			}
+			errJSON, _ := json.Marshal(errMsg)
+			c.Send <- errJSON
+
 			continue
 		}
 
@@ -201,19 +237,13 @@ func (c *Client) readPump(m *Manager) {
 
 		// Handle different message types
 		switch wsMessage.Type {
-		case MessageTypeAuth:
-			// Handle auth message (for backward compatibility)
-			// The primary authentication should happen via the HTTP Authorization header
-			// This is just a fallback for clients that send auth after connection
-			if wsMessage.Token != "" {
-				tokenPreview := "..."
-				if len(wsMessage.Token) > 10 {
-					tokenPreview = wsMessage.Token[:10] + "..."
-				}
-				log.Printf("[WebSocket-ReadPump] Received auth message from client %s with token: %s", c.ID, tokenPreview)
-				// We don't need to do anything here as authentication is already handled by middleware
-			}
 		case MessageTypeMessage:
+			// Validate message
+			if wsMessage.Content == "" {
+				log.Printf("[WebSocket-ReadPump] Empty message content from client %s", c.ID)
+				continue
+			}
+
 			// Send message to recipient
 			if wsMessage.ReceiverID != uuid.Nil {
 				log.Printf("[WebSocket-ReadPump] Forwarding message from client %s to recipient %s", c.ID, wsMessage.ReceiverID)
@@ -221,6 +251,15 @@ func (c *Client) readPump(m *Manager) {
 				m.SendToUser(wsMessage.ReceiverID, messageJSON)
 			} else {
 				log.Printf("[WebSocket-ReadPump] Invalid receiver ID in message from client %s", c.ID)
+
+				// Send error message to client
+				errMsg := WebSocketMessage{
+					Type:      "error",
+					Content:   "Invalid receiver ID",
+					Timestamp: time.Now(),
+				}
+				errJSON, _ := json.Marshal(errMsg)
+				c.Send <- errJSON
 			}
 		case MessageTypeTyping:
 			// Send typing indicator to recipient
@@ -234,6 +273,15 @@ func (c *Client) readPump(m *Manager) {
 			}
 		default:
 			log.Printf("[WebSocket-ReadPump] Unknown message type '%s' from client %s", wsMessage.Type, c.ID)
+
+			// Send error message to client
+			errMsg := WebSocketMessage{
+				Type:      "error",
+				Content:   "Unknown message type",
+				Timestamp: time.Now(),
+			}
+			errJSON, _ := json.Marshal(errMsg)
+			c.Send <- errJSON
 		}
 	}
 }

@@ -1,4 +1,4 @@
-import { API_URL, WS_URL } from '../config';
+import { WS_URL } from '../config';
 import { getToken } from '../utils/tokenStorage';
 
 /**
@@ -15,9 +15,8 @@ class WebSocketService {
     this.currentToken = null;
     this.tokenRefreshInProgress = false;
     
-    // Hardcode the correct WebSocket URL
-    this.wsUrl = 'ws://localhost:8080/api/ws';
-    console.log('WebSocket URL base (hardcoded):', this.wsUrl);
+    // Use the URL from config
+    this.wsUrl = WS_URL;
   }
   
   /**
@@ -31,11 +30,8 @@ class WebSocketService {
     }
     
     if (this.socket || this.isConnecting) {
-      console.log('WebSocket already connected or connecting');
-      
       // If the token has changed, disconnect and reconnect with the new token
       if (token !== this.currentToken) {
-        console.log('Token has changed, reconnecting with new token');
         this.disconnect();
       } else {
         return;
@@ -44,29 +40,21 @@ class WebSocketService {
     
     this.currentToken = token;
     this.isConnecting = true;
-    console.log('Initializing WebSocket connection');
     
     try {
-      // Add token as URL parameter for authentication
-      const wsUrlWithToken = `${this.wsUrl}?token=${encodeURIComponent(token)}`;
-      console.log('Connecting to WebSocket URL with token parameter:', wsUrlWithToken);
+      console.log(`Connecting to WebSocket at ${this.wsUrl}`);
       
-      // Create WebSocket connection
+      // Based on server.log and the backend code, the server supports token authentication
+      // via the URL parameter even for the /api/ws endpoint
+      const wsUrlWithToken = `${this.wsUrl}?token=${encodeURIComponent(token)}`;
+      
+      console.log('Creating WebSocket connection with token in URL parameter');
       this.socket = new WebSocket(wsUrlWithToken);
-      console.log('WebSocket created with URL parameter');
       
       this.socket.onopen = () => {
-        console.log('WebSocket connection opened');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
-        
-        // Send authentication message as fallback
-        // This is for backward compatibility with servers that expect auth message
-        this.socket.send(JSON.stringify({
-          type: 'auth',
-          token: token
-        }));
-        console.log('Sent authentication message');
+        console.log('WebSocket connection established successfully');
         
         // Dispatch connect event
         this.dispatchEvent('connect', {});
