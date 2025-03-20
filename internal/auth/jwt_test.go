@@ -4,38 +4,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ammar1510/converse/internal/models"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/ammar1510/converse/internal/models"
 )
 
-// TestInitJWTKey tests the JWT initialization 
 func TestInitJWTKey(t *testing.T) {
-	// Setup
 	testKey := []byte("test-secret-key-for-jwt-tests")
-	
-	// Test
+
 	InitJWTKey(testKey)
-	
-	// Since jwtKey is private, we can only test indirectly
-	// by generating and validating a token
+
 	user := &models.User{
 		ID:       uuid.New(),
 		Username: "testuser",
 		Email:    "test@example.com",
 	}
-	
+
 	token, _, err := GenerateToken(user)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, token)
 }
 
-// TestGenerateToken tests token generation functionality
 func TestGenerateToken(t *testing.T) {
-	// Setup 
 	testKey := []byte("test-secret-key-for-jwt-tests")
 	InitJWTKey(testKey)
-	
+
 	tests := []struct {
 		name    string
 		user    *models.User
@@ -64,23 +57,20 @@ func TestGenerateToken(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	
-	// Run test cases
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			token, expiry, err := GenerateToken(tt.user)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Empty(t, token)
 			} else {
 				assert.NoError(t, err)
 				assert.NotEmpty(t, token)
-				
-				// Verify expiration time is in the future
+
 				assert.True(t, expiry.After(time.Now()))
-				
-				// Verify token can be validated
+
 				claims, err := ValidateToken(token)
 				assert.NoError(t, err)
 				assert.NotNil(t, claims)
@@ -91,13 +81,10 @@ func TestGenerateToken(t *testing.T) {
 	}
 }
 
-// TestValidateToken tests token validation
 func TestValidateToken(t *testing.T) {
-	// Setup
 	testKey := []byte("test-secret-key-for-jwt-tests")
 	InitJWTKey(testKey)
-	
-	// Create a valid user and token
+
 	validUser := &models.User{
 		ID:       uuid.New(),
 		Username: "testuser",
@@ -105,7 +92,7 @@ func TestValidateToken(t *testing.T) {
 	}
 	validToken, _, err := GenerateToken(validUser)
 	assert.NoError(t, err)
-	
+
 	tests := []struct {
 		name        string
 		tokenString string
@@ -132,12 +119,11 @@ func TestValidateToken(t *testing.T) {
 			wantErr:     true,
 		},
 	}
-	
-	// Run test cases
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			claims, err := ValidateToken(tt.tokenString)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, claims)
@@ -151,13 +137,10 @@ func TestValidateToken(t *testing.T) {
 	}
 }
 
-// TestGetUserIDFromToken tests extracting user ID from claims
 func TestGetUserIDFromToken(t *testing.T) {
-	// Setup
 	testKey := []byte("test-secret-key-for-jwt-tests")
 	InitJWTKey(testKey)
-	
-	// Create a valid user and get claims
+
 	validUser := &models.User{
 		ID:       uuid.New(),
 		Username: "testuser",
@@ -165,16 +148,15 @@ func TestGetUserIDFromToken(t *testing.T) {
 	}
 	validToken, _, err := GenerateToken(validUser)
 	assert.NoError(t, err)
-	
+
 	validClaims, err := ValidateToken(validToken)
 	assert.NoError(t, err)
-	
-	// Create invalid claims
+
 	invalidClaims := &JWTClaims{
 		UserID:   "not-a-valid-uuid",
 		Username: "testuser",
 	}
-	
+
 	tests := []struct {
 		name    string
 		claims  *JWTClaims
@@ -196,12 +178,11 @@ func TestGetUserIDFromToken(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	
-	// Run test cases
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userID, err := GetUserIDFromToken(tt.claims)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Equal(t, uuid.Nil, userID)
@@ -212,4 +193,3 @@ func TestGetUserIDFromToken(t *testing.T) {
 		})
 	}
 }
-

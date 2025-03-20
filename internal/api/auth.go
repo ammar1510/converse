@@ -144,3 +144,38 @@ func (h *AuthHandler) GetMe(c *gin.Context) {
 		CreatedAt:   user.CreatedAt,
 	})
 }
+
+// GetAllUsers retrieves all users except the current user
+func (h *AuthHandler) GetAllUsers(c *gin.Context) {
+	// Get the current user ID from the context (set by auth middleware)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Convert to UUID
+	currentUserID := userID.(uuid.UUID)
+
+	// Get all users except the current user
+	users, err := h.DB.GetAllUsers(currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve users"})
+		return
+	}
+
+	// Convert to user response objects (without sensitive data)
+	var userResponses []*models.UserResponse
+	for _, user := range users {
+		userResponses = append(userResponses, &models.UserResponse{
+			ID:          user.ID,
+			Username:    user.Username,
+			Email:       user.Email,
+			DisplayName: user.DisplayName,
+			AvatarURL:   user.AvatarURL,
+			CreatedAt:   user.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, userResponses)
+}

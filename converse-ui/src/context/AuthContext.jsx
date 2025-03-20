@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import { isTokenValid, getUserData, clearAuthData } from '../utils/tokenStorage';
 import * as authService from '../services/authService';
+import websocketService from '../services/websocketService';
 
 // Create context
 const AuthContext = createContext(null);
@@ -60,9 +61,19 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     try {
+      // First, ensure we're logged out completely
+      authService.logout();
+      
+      // Reset WebSocket connection state to ensure a clean start
+      websocketService.reset();
+      
+      // Now perform the login
       const { user } = await authService.login({ email, password });
+      
+      // Update state after successful login
       setUser(user);
       setIsAuthenticated(true);
+      
       return user;
     } catch (err) {
       setError(err.error || 'Login failed. Please check your credentials.');
@@ -94,9 +105,17 @@ export const AuthProvider = ({ children }) => {
    * Logout the current user
    */
   const logout = () => {
+    // Reset WebSocket connection state before clearing auth data
+    websocketService.reset();
+    
+    // Perform logout
     authService.logout();
+    
+    // Update state after logout
     setUser(null);
     setIsAuthenticated(false);
+    
+    console.log('User logged out, WebSocket reset, auth data cleared');
   };
 
   // Context value

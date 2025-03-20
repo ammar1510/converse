@@ -2,6 +2,8 @@ package auth
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -13,7 +15,7 @@ import (
 
 var (
 	ErrInvalidToken = errors.New("invalid token")
-	// This variable will be initialized either from environment 
+	// This variable will be initialized either from environment
 	// variables or explicitly via InitJWTKey function
 	jwtKey = []byte(os.Getenv("JWT_SECRET"))
 )
@@ -38,14 +40,14 @@ func GenerateToken(user *models.User) (string, time.Time, error) {
 	if user == nil {
 		return "", time.Time{}, errors.New("user cannot be nil")
 	}
-	
+
 	// Check for zero UUID (missing ID)
 	if user.ID == uuid.Nil {
 		return "", time.Time{}, errors.New("user ID cannot be empty")
 	}
-	
+
 	expirationTime := time.Now().Add(24 * time.Hour)
-	
+
 	claims := &JWTClaims{
 		UserID:   user.ID.String(),
 		Username: user.Username,
@@ -54,29 +56,46 @@ func GenerateToken(user *models.User) (string, time.Time, error) {
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(jwtKey)
-	
+
 	return tokenString, expirationTime, err
 }
 
 // ValidateToken validates a JWT token and returns the claims
 func ValidateToken(tokenString string) (*JWTClaims, error) {
+	// Safe logging of token preview
+	if len(tokenString) > 10 {
+		log.Printf("[JWT] Validating token: %s...", tokenString[:10])
+	} else if len(tokenString) > 0 {
+		log.Printf("[JWT] Validating token: %s...", tokenString)
+	} else {
+		log.Printf("[JWT] Validating empty token")
+	}
+
 	claims := &JWTClaims{}
-	
+
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		// Check signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			log.Printf("[JWT] Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return jwtKey, nil
 	})
-	
+
 	if err != nil {
+		log.Printf("[JWT] Token validation error: %v", err)
 		return nil, err
 	}
-	
+
 	if !token.Valid {
+		log.Printf("[JWT] Token is invalid")
 		return nil, ErrInvalidToken
 	}
-	
+
+	log.Printf("[JWT] Token validated successfully for user: %s", claims.Username)
 	return claims, nil
 }
 
