@@ -22,7 +22,7 @@ const Messaging = () => {
     handleSelectUser,
     formatConversations,
     sendMessage,
-    sendTyping
+    handleTypingIndicator
   } = useChat();
   
   const [activeTab, setActiveTab] = useState('conversations'); // 'conversations' or 'users'
@@ -43,7 +43,7 @@ const Messaging = () => {
   
   const handleTyping = (isTyping) => {
     if (!selectedConversation) return;
-    sendTyping(selectedConversation.id, isTyping);
+    handleTypingIndicator(selectedConversation.id, isTyping);
   };
   
   // Wrapper for handleSelectUser to also switch to conversations tab

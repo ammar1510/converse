@@ -1,47 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const MessageInput = ({ onSendMessage, onTyping }) => {
   const [message, setMessage] = useState('');
-  const typingTimeoutRef = useRef(null);
-  const isTypingRef = useRef(false);
+  const [isTyping, setIsTyping] = useState(false);
 
-  // Handle typing indicator
+  // Cleanup when component unmounts
   useEffect(() => {
     return () => {
-      // Clean up typing timeout on unmount
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
       // Ensure typing indicator is turned off when component unmounts
-      if (isTypingRef.current && onTyping) {
+      if (isTyping && onTyping) {
         onTyping(false);
       }
     };
-  }, [onTyping]);
+  }, [onTyping, isTyping]);
 
   const handleChange = (e) => {
     const newMessage = e.target.value;
     setMessage(newMessage);
     
-    // Handle typing indicator
-    if (onTyping) {
-      // If user wasn't typing before, send typing indicator
-      if (!isTypingRef.current) {
-        isTypingRef.current = true;
-        onTyping(true);
-      }
-      
-      // Clear existing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      // Set timeout to stop typing indicator after 2 seconds of inactivity
-      typingTimeoutRef.current = setTimeout(() => {
-        isTypingRef.current = false;
-        onTyping(false);
-      }, 2000);
+    // Simple typing indicator logic - just notify parent component
+    if (newMessage.trim() !== '' && !isTyping && onTyping) {
+      setIsTyping(true);
+      onTyping(true);
+    } else if (newMessage.trim() === '' && isTyping && onTyping) {
+      setIsTyping(false);
+      onTyping(false);
     }
   };
 
@@ -55,13 +38,9 @@ const MessageInput = ({ onSendMessage, onTyping }) => {
     setMessage('');
     
     // Turn off typing indicator when message is sent
-    if (onTyping && isTypingRef.current) {
-      isTypingRef.current = false;
+    if (onTyping && isTyping) {
+      setIsTyping(false);
       onTyping(false);
-      
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
     }
   };
 

@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import websocketService, { EVENT_TYPES } from '../services/websocketService';
 import messageService from '../services/messageService';
 import { getToken } from '../utils/tokenStorage';
-import { formatTimestamp, generateAvatarUrl } from '../utils/formatUtils';
+import { formatTimestamp, generateAvatarUrl, registerEventHandlers } from '../utils/utils';
 
 // Create context
 const ChatContext = createContext();
@@ -22,6 +22,9 @@ export const ChatProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [currentMessages, setCurrentMessages] = useState([]);
+  
+  // Define a typingTimeouts ref at the component top level
+  const typingTimeoutsRef = useRef({});
   
   // Get token directly from storage to ensure it's always current
   const token = getToken();
@@ -253,7 +256,7 @@ export const ChatProvider = ({ children }) => {
     return () => clearInterval(refreshInterval);
   }, [selectedConversation, fetchConversation]);
   
-  // Connect to WebSocket when authenticated
+  // Setup WebSocket event listeners
   useEffect(() => {
     // Always get the latest token from storage
     const currentToken = getToken();
@@ -316,35 +319,27 @@ export const ChatProvider = ({ children }) => {
       setError(`WebSocket error: ${data.message || 'Unknown error'}`);
     };
     
-    // Helper function to unsubscribe from events
-    const unsubscribeAll = (subscriptions) => {
-      subscriptions.forEach(unsubscribe => unsubscribe && unsubscribe());
-    };
-    
     if (isAuthenticated && currentToken && user?.id) {
       console.log('User is authenticated. Setting up WebSocket connection...');
       
       // Disconnect any existing connection first
       websocketService.disconnect();
       
-      // Register event handlers with the new system
-      const subscriptions = [
-        websocketService.on(EVENT_TYPES.CONNECT, handleConnect),
-        websocketService.on(EVENT_TYPES.DISCONNECT, handleDisconnect),
-        websocketService.on(EVENT_TYPES.MESSAGE, handleMessage),
-        websocketService.on(EVENT_TYPES.TYPING, handleTyping),
-        websocketService.on(EVENT_TYPES.ERROR, handleError)
-      ];
+      // Register event handlers using the utility function
+      const cleanup = registerEventHandlers(websocketService, {
+        [EVENT_TYPES.CONNECT]: handleConnect,
+        [EVENT_TYPES.DISCONNECT]: handleDisconnect,
+        [EVENT_TYPES.MESSAGE]: handleMessage,
+        [EVENT_TYPES.TYPING]: handleTyping,
+        [EVENT_TYPES.ERROR]: handleError
+      });
       
       // Connect to WebSocket with current token
       console.log('Connecting to WebSocket with token');
       websocketService.connect(currentToken);
       
       // Clean up on unmount or when dependencies change
-      return () => {
-        console.log('Cleaning up WebSocket connections');
-        unsubscribeAll(subscriptions);
-      };
+      return cleanup;
     } else if (!isAuthenticated) {
       console.log('User is not authenticated, disconnecting WebSocket');
       // Ensure WebSocket is disconnected when not authenticated
@@ -441,6 +436,36 @@ export const ChatProvider = ({ children }) => {
     }
   }, [isAuthenticated, fetchUsers]);
   
+  // Add new utility function for managing typing indicators with timeouts
+  const handleTypingIndicator = useCallback((conversationId, isTyping) => {
+    if (!conversationId) return;
+    
+    if (isTyping) {
+      // Send typing indicator
+      sendTyping(conversationId, true);
+      
+      // Clear any existing timeout for this user
+      if (typingTimeoutsRef.current[conversationId]) {
+        clearTimeout(typingTimeoutsRef.current[conversationId]);
+      }
+      
+      // Set timeout to automatically clear typing indicator after inactivity
+      typingTimeoutsRef.current[conversationId] = setTimeout(() => {
+        sendTyping(conversationId, false);
+        delete typingTimeoutsRef.current[conversationId];
+      }, 3000); // 3 seconds of inactivity
+    } else {
+      // Turn off typing indicator
+      sendTyping(conversationId, false);
+      
+      // Clear any existing timeout
+      if (typingTimeoutsRef.current[conversationId]) {
+        clearTimeout(typingTimeoutsRef.current[conversationId]);
+        delete typingTimeoutsRef.current[conversationId];
+      }
+    }
+  }, [sendTyping]);
+  
   // Context value
   const value = {
     isConnected,
@@ -460,7 +485,8 @@ export const ChatProvider = ({ children }) => {
     currentMessages,
     handleSelectConversation,
     handleSelectUser,
-    formatConversations
+    formatConversations,
+    handleTypingIndicator
   };
   
   return (
