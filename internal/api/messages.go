@@ -8,21 +8,27 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ammar1510/converse/internal/database"
+	"github.com/ammar1510/converse/internal/logger"
 	"github.com/ammar1510/converse/internal/models"
 	"github.com/ammar1510/converse/internal/websocket"
 )
 
 // Global WebSocket manager instance
 var WSManager *websocket.Manager
+var log = logger.New("api-messages")
 
 // MessageHandler handles message-related routes
 type MessageHandler struct {
-	DB database.DBInterface
+	DB  database.DBInterface
+	log *logger.Logger
 }
 
 // NewMessageHandler creates a new message handler
 func NewMessageHandler(db database.DBInterface) *MessageHandler {
-	return &MessageHandler{DB: db}
+	return &MessageHandler{
+		DB:  db,
+		log: logger.New("api-messages"),
+	}
 }
 
 // SendMessage handles the creation of a new message
@@ -65,6 +71,9 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		if err == nil {
 			// Send to receiver
 			WSManager.SendToUser(req.ReceiverID, messageJSON)
+			h.log.Debug("Sent WebSocket notification to user %s", req.ReceiverID)
+		} else {
+			h.log.Error("Failed to marshal WebSocket message: %v", err)
 		}
 	}
 
