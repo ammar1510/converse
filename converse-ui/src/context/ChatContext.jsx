@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import websocketService from '../services/websocketService';
 import messageService from '../services/messageService';
 import { getToken } from '../utils/tokenStorage';
+import { formatTimestamp, generateAvatarUrl } from '../utils/formatUtils';
 
 // Create context
 const ChatContext = createContext();
@@ -19,9 +20,48 @@ export const ChatProvider = ({ children }) => {
   const [typingUsers, setTypingUsers] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [currentMessages, setCurrentMessages] = useState([]);
   
   // Get token directly from storage to ensure it's always current
   const token = getToken();
+
+  /**
+   * Format conversations for display
+   * @returns {array} Formatted conversations
+   */
+  const formatConversations = useCallback(() => {
+    if (!user?.id) return [];
+    
+    return conversations.map(convo => {
+      // Get the last message
+      const lastMsg = convo.lastMessage || {};
+      
+      // Format timestamp
+      const timestamp = lastMsg.created_at 
+        ? formatTimestamp(lastMsg.created_at)
+        : '';
+      
+      // Find the user in the users array
+      const contactUser = users.find(u => u.id === convo.id);
+      
+      // Get contact info from sender or receiver
+      const contact = {
+        id: convo.id,
+        name: contactUser ? (contactUser.display_name || contactUser.username) : 'Unknown User',
+        status: 'Online', // This should be replaced with actual status
+        avatar: contactUser?.avatar_url || generateAvatarUrl(contactUser?.username || convo.id)
+      };
+      
+      return {
+        id: convo.id,
+        title: `Conversation with ${contact.name}`,
+        lastMessage: lastMsg.content || 'No messages yet',
+        timestamp,
+        contact
+      };
+    });
+  }, [conversations, users, user?.id]);
 
   /**
    * Update conversations list with a new message
@@ -99,6 +139,120 @@ export const ChatProvider = ({ children }) => {
     }
   }, [user?.id]);
 
+  /**
+   * Fetch messages for a specific conversation
+   * @param {string} userId - UUID of the other user in the conversation
+   */
+  const fetchConversation = useCallback(async (userId) => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const conversationData = await messageService.getConversation(userId);
+      
+      // Sort messages by timestamp (oldest first)
+      const sortedConversationData = [...conversationData].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      
+      setMessages(prev => ({
+        ...prev,
+        [userId]: sortedConversationData
+      }));
+      
+      // Mark unread messages as read
+      const unreadMessages = conversationData.filter(
+        msg => !msg.is_read && msg.sender_id === userId
+      );
+      
+      for (const msg of unreadMessages) {
+        await messageService.markAsRead(msg.id);
+      }
+      
+      return conversationData;
+    } catch (err) {
+      console.error(`Error fetching conversation with ${userId}:`, err);
+      setError('Failed to load conversation');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  /**
+   * Handle selecting a conversation
+   * @param {object} conversation - The conversation to select
+   */
+  const handleSelectConversation = useCallback((conversation) => {
+    setSelectedConversation(conversation);
+    
+    if (conversation) {
+      const conversationMessages = messages[conversation.id] || [];
+      setCurrentMessages(conversationMessages);
+      
+      // Only fetch if no messages loaded
+      if (conversationMessages.length === 0) {
+        fetchConversation(conversation.id);
+      }
+    }
+  }, [messages, fetchConversation]);
+
+  /**
+   * Handle selecting a user to start or continue a conversation
+   * @param {object} selectedUser - The user to start/continue conversation with
+   */
+  const handleSelectUser = useCallback((selectedUser) => {
+    // Create a conversation object from the selected user
+    const conversation = {
+      id: selectedUser.id,
+      title: `Conversation with ${selectedUser.display_name || selectedUser.username}`,
+      lastMessage: 'Start a new conversation',
+      timestamp: '',
+      contact: {
+        id: selectedUser.id,
+        name: selectedUser.display_name || selectedUser.username,
+        status: 'Online', // Default status
+        avatar: selectedUser.avatar_url || generateAvatarUrl(selectedUser.username)
+      }
+    };
+    
+    handleSelectConversation(conversation);
+  }, [handleSelectConversation]);
+  
+  // Update selected conversation when conversations change
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      // Format the first conversation and select it if none is selected
+      const formattedConversations = formatConversations();
+      if (formattedConversations.length > 0) {
+        setSelectedConversation(formattedConversations[0]);
+      }
+    }
+  }, [conversations, selectedConversation, formatConversations]);
+  
+  // Update current messages when selected conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      const conversationMessages = messages[selectedConversation.id] || [];
+      setCurrentMessages(conversationMessages);
+    }
+  }, [selectedConversation, messages]);
+
+  // Periodic refresh of current conversation
+  useEffect(() => {
+    if (!selectedConversation) return;
+    
+    const refreshInterval = setInterval(() => {
+      fetchConversation(selectedConversation.id).catch(() => {
+        // Silently handle errors during background refresh
+      });
+    }, 15000); // Reduced frequency
+    
+    return () => clearInterval(refreshInterval);
+  }, [selectedConversation, fetchConversation]);
+  
   // Connect to WebSocket when authenticated
   useEffect(() => {
     // Always get the latest token from storage
@@ -207,48 +361,6 @@ export const ChatProvider = ({ children }) => {
   }, [isAuthenticated, user?.id, fetchConversations, updateConversationWithMessage]);
   
   /**
-   * Fetch messages for a specific conversation
-   * @param {string} userId - UUID of the other user in the conversation
-   */
-  const fetchConversation = useCallback(async (userId) => {
-    if (!user?.id) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const conversationData = await messageService.getConversation(userId);
-      
-      // Sort messages by timestamp (oldest first)
-      const sortedConversationData = [...conversationData].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      );
-      
-      setMessages(prev => ({
-        ...prev,
-        [userId]: sortedConversationData
-      }));
-      
-      // Mark unread messages as read
-      const unreadMessages = conversationData.filter(
-        msg => !msg.is_read && msg.sender_id === userId
-      );
-      
-      for (const msg of unreadMessages) {
-        await messageService.markAsRead(msg.id);
-      }
-      
-      return conversationData;
-    } catch (err) {
-      console.error(`Error fetching conversation with ${userId}:`, err);
-      setError('Failed to load conversation');
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-  
-  /**
    * Send a message to another user
    * @param {string} receiverId - UUID of the message recipient
    * @param {string} content - Message content
@@ -350,7 +462,12 @@ export const ChatProvider = ({ children }) => {
     fetchUsers,
     sendMessage,
     sendTyping,
-    isUserTyping
+    isUserTyping,
+    selectedConversation,
+    currentMessages,
+    handleSelectConversation,
+    handleSelectUser,
+    formatConversations
   };
   
   return (
