@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ammar1510/converse/internal/auth"
+	"github.com/ammar1510/converse/internal/logger"
 )
+
+var mwLog = logger.New("api-middleware")
 
 // AuthMiddleware validates JWT tokens and sets user info in context
 func AuthMiddleware() gin.HandlerFunc {
@@ -17,6 +20,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Check if Authorization header exists and has Bearer format
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			mwLog.Debug("Missing or invalid Authorization header from %s", c.ClientIP())
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
 			c.Abort()
 			return
@@ -28,6 +32,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// Validate token
 		claims, err := auth.ValidateToken(tokenString)
 		if err != nil {
+			mwLog.Debug("Invalid token from %s: %v", c.ClientIP(), err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
@@ -36,6 +41,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// Parse user ID string into UUID
 		userUUID, err := uuid.Parse(claims.UserID)
 		if err != nil {
+			mwLog.Error("Invalid user ID format in token: %s", claims.UserID)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID format in token"})
 			c.Abort()
 			return
@@ -44,6 +50,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// Set user ID (as UUID) and username in context
 		c.Set("userID", userUUID)
 		c.Set("username", claims.Username)
+		mwLog.Debug("User %s (%s) authenticated", claims.Username, userUUID)
 
 		c.Next()
 	}
@@ -59,19 +66,23 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			mwLog.Debug("Token found in Authorization header from %s", c.ClientIP())
 		} else {
 			// If no valid Authorization header, try to get token from URL parameter
 			tokenString = c.Query("token")
 			if tokenString == "" {
+				mwLog.Debug("No authentication token provided from %s", c.ClientIP())
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "No authentication token provided"})
 				c.Abort()
 				return
 			}
+			mwLog.Debug("Token found in URL parameter from %s", c.ClientIP())
 		}
 
 		// Validate token
 		claims, err := auth.ValidateToken(tokenString)
 		if err != nil {
+			mwLog.Debug("Invalid token from %s: %v", c.ClientIP(), err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
@@ -80,6 +91,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 		// Parse user ID string into UUID
 		userUUID, err := uuid.Parse(claims.UserID)
 		if err != nil {
+			mwLog.Error("Invalid user ID format in token: %s", claims.UserID)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID format in token"})
 			c.Abort()
 			return
@@ -88,6 +100,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 		// Set user ID (as UUID) and username in context
 		c.Set("userID", userUUID)
 		c.Set("username", claims.Username)
+		mwLog.Debug("User %s (%s) authenticated via TokenAuthMiddleware", claims.Username, userUUID)
 
 		c.Next()
 	}

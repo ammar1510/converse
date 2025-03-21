@@ -8,17 +8,22 @@ import (
 
 	"github.com/ammar1510/converse/internal/auth"
 	"github.com/ammar1510/converse/internal/database"
+	"github.com/ammar1510/converse/internal/logger"
 	"github.com/ammar1510/converse/internal/models"
 )
 
 // AuthHandler handles authentication routes
 type AuthHandler struct {
-	DB database.DBInterface
+	DB  database.DBInterface
+	log *logger.Logger
 }
 
 // NewAuthHandler creates a new auth handler
 func NewAuthHandler(db database.DBInterface) *AuthHandler {
-	return &AuthHandler{DB: db}
+	return &AuthHandler{
+		DB:  db,
+		log: logger.New("api-auth"),
+	}
 }
 
 // Register handles user registration
@@ -89,8 +94,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Update last seen
 	if err := h.DB.UpdateLastSeen(user.ID); err != nil {
-		// Just log this error, don't return it
-		// log.Printf("Failed to update last_seen: %v", err)
+		// Log this error, don't return it
+		h.log.Warn("Failed to update last_seen: %v", err)
 	}
 
 	// Generate JWT token

@@ -5,3 +5,4 @@ converse-ui/.env
 converse-ui/.env.prod
 #ui 
 example-ui/*
+server.log
