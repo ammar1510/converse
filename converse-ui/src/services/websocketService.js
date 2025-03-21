@@ -9,13 +9,27 @@ const CONNECTION_STATES = {
   RECONNECTING: 'reconnecting'
 };
 
+// Standard WebSocket event types
+const EVENT_TYPES = {
+  // WebSocket connection events
+  CONNECT: 'connect',
+  DISCONNECT: 'disconnect',
+  RECONNECTING: 'reconnecting',
+  RECONNECT_FAILED: 'reconnect_failed',
+  ERROR: 'error',
+  
+  // Application-specific events
+  MESSAGE: 'message',
+  TYPING: 'typing'
+};
+
 /**
  * Service for managing WebSocket connections and real-time messaging
  */
 class WebSocketService {
   constructor() {
     this.socket = null;
-    this.listeners = {};
+    this.eventRegistry = {}; // Registry of event handlers by type
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectTimeout = null;
@@ -26,6 +40,11 @@ class WebSocketService {
     
     // Use the URL from config
     this.wsUrl = WS_URL;
+    
+    // Initialize event registry with empty arrays for all event types
+    Object.values(EVENT_TYPES).forEach(eventType => {
+      this.eventRegistry[eventType] = [];
+    });
   }
   
   /**
@@ -37,7 +56,7 @@ class WebSocketService {
     // Validate token
     if (!token) {
       console.error('Cannot connect to WebSocket: No token provided');
-      this.dispatchEvent('error', { message: 'No token provided' });
+      this.triggerEvent(EVENT_TYPES.ERROR, { message: 'No token provided' });
       return;
     }
     
@@ -89,8 +108,8 @@ class WebSocketService {
       this.reconnectAttempts = 0;
       console.log('WebSocket connection established successfully');
       
-      // Dispatch connect event
-      this.dispatchEvent('connect', {});
+      // Trigger connect event
+      this.triggerEvent(EVENT_TYPES.CONNECT, {});
     };
     
     // Message received
@@ -98,10 +117,21 @@ class WebSocketService {
       console.log('WebSocket message received');
       try {
         const data = JSON.parse(event.data);
-        this.dispatchEvent(data.type || 'message', data);
+        
+        // Handle different message types
+        if (data.type === 'typing') {
+          this.triggerEvent(EVENT_TYPES.TYPING, data);
+        } else {
+          // Default to 'message' type
+          this.triggerEvent(EVENT_TYPES.MESSAGE, data);
+        }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
-        this.dispatchEvent('error', { message: 'Failed to parse message', error });
+        this.triggerEvent(EVENT_TYPES.ERROR, { 
+          message: 'Failed to parse message', 
+          error,
+          originalData: event.data 
+        });
       }
     };
     
@@ -114,8 +144,11 @@ class WebSocketService {
       // Update state
       this.connectionState = CONNECTION_STATES.DISCONNECTED;
       
-      // Dispatch disconnect event
-      this.dispatchEvent('disconnect', { code: event.code, reason: event.reason });
+      // Trigger disconnect event
+      this.triggerEvent(EVENT_TYPES.DISCONNECT, { 
+        code: event.code, 
+        reason: event.reason 
+      });
       
       // Handle reconnection based on close code
       this.handleCloseEvent(event, wasConnected);
@@ -124,7 +157,7 @@ class WebSocketService {
     // Error occurred
     this.socket.onerror = (error) => {
       console.error('WebSocket error:', error);
-      this.dispatchEvent('error', { error });
+      this.triggerEvent(EVENT_TYPES.ERROR, { error });
     };
   }
   
@@ -152,7 +185,9 @@ class WebSocketService {
       this.handleConnectionFailure(this.currentToken);
     } else {
       console.log('Max reconnect attempts reached, giving up');
-      this.dispatchEvent('reconnect_failed', { attempts: this.reconnectAttempts });
+      this.triggerEvent(EVENT_TYPES.RECONNECT_FAILED, { 
+        attempts: this.reconnectAttempts 
+      });
     }
   }
   
@@ -164,7 +199,9 @@ class WebSocketService {
     // Don't attempt to reconnect if we've reached the max attempts
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.log('Max reconnect attempts reached');
-      this.dispatchEvent('reconnect_failed', { attempts: this.reconnectAttempts });
+      this.triggerEvent(EVENT_TYPES.RECONNECT_FAILED, { 
+        attempts: this.reconnectAttempts 
+      });
       return;
     }
     
@@ -195,7 +232,7 @@ class WebSocketService {
       this.connect(tokenToUse, true);
     }, delay + jitter);
     
-    this.dispatchEvent('reconnecting', { 
+    this.triggerEvent(EVENT_TYPES.RECONNECTING, { 
       attempt: this.reconnectAttempts, 
       maxAttempts: this.maxReconnectAttempts 
     });
@@ -221,46 +258,90 @@ class WebSocketService {
   }
   
   /**
-   * Add event listener
-   * @param {string} event - Event name
-   * @param {function} callback - Event callback
+   * Register a handler for a specific event type
+   * @param {string} eventType - Event type from EVENT_TYPES
+   * @param {function} handler - Event handler function
+   * @returns {function} Unsubscribe function to remove this handler
    */
-  addEventListener(event, callback) {
-    if (!this.listeners[event]) {
-      this.listeners[event] = [];
+  on(eventType, handler) {
+    // Validate event type
+    if (!Object.values(EVENT_TYPES).includes(eventType)) {
+      console.warn(`Unknown event type: ${eventType}`);
+      return () => {}; // Return no-op unsubscribe function
     }
-    this.listeners[event].push(callback);
+    
+    // Add handler to registry
+    this.eventRegistry[eventType].push(handler);
+    
+    // Return unsubscribe function
+    return () => this.off(eventType, handler);
   }
   
   /**
-   * Remove event listener
-   * @param {string} event - Event name
-   * @param {function} callback - Event callback to remove
+   * Remove a handler for a specific event type
+   * @param {string} eventType - Event type from EVENT_TYPES
+   * @param {function} handler - Event handler function to remove
    */
-  removeEventListener(event, callback) {
-    if (this.listeners[event]) {
-      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+  off(eventType, handler) {
+    if (this.eventRegistry[eventType]) {
+      this.eventRegistry[eventType] = this.eventRegistry[eventType].filter(h => h !== handler);
     }
   }
   
   /**
-   * Dispatch event to all listeners
-   * @param {string} event - Event name
+   * Trigger an event to all registered handlers
+   * @param {string} eventType - Event type from EVENT_TYPES
    * @param {object} data - Event data
    */
-  dispatchEvent(event, data) {
-    if (this.listeners[event] && this.listeners[event].length > 0) {
-      console.log(`Dispatching ${event} event to ${this.listeners[event].length} listeners`);
-      this.listeners[event].forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error(`Error in ${event} event handler:`, error);
-        }
-      });
-    } else {
-      console.log(`No listeners for ${event} event`);
+  triggerEvent(eventType, data) {
+    if (!this.eventRegistry[eventType] || this.eventRegistry[eventType].length === 0) {
+      console.log(`No handlers registered for ${eventType} event`);
+      return;
     }
+    
+    console.log(`Triggering ${eventType} event to ${this.eventRegistry[eventType].length} handlers`);
+    
+    // Copy handlers array to prevent modification during iteration
+    const handlers = [...this.eventRegistry[eventType]];
+    
+    // Call each handler with data
+    handlers.forEach(handler => {
+      try {
+        handler(data);
+      } catch (error) {
+        console.error(`Error in ${eventType} event handler:`, error);
+      }
+    });
+  }
+  
+  /**
+   * Legacy addEventListener for backward compatibility
+   * @param {string} event - Event name
+   * @param {function} callback - Event callback
+   * @deprecated Use on() instead
+   */
+  addEventListener(event, callback) {
+    return this.on(event, callback);
+  }
+  
+  /**
+   * Legacy removeEventListener for backward compatibility
+   * @param {string} event - Event name
+   * @param {function} callback - Event callback to remove
+   * @deprecated Use off() instead
+   */
+  removeEventListener(event, callback) {
+    this.off(event, callback);
+  }
+  
+  /**
+   * Legacy dispatchEvent for backward compatibility
+   * @param {string} event - Event name
+   * @param {object} data - Event data
+   * @deprecated Use triggerEvent() instead
+   */
+  dispatchEvent(event, data) {
+    this.triggerEvent(event, data);
   }
   
   /**
@@ -284,6 +365,10 @@ class WebSocketService {
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
+      this.triggerEvent(EVENT_TYPES.ERROR, {
+        message: 'Failed to send message',
+        error
+      });
       return false;
     }
   }
@@ -308,6 +393,10 @@ class WebSocketService {
       return true;
     } catch (error) {
       console.error('Error sending typing indicator:', error);
+      this.triggerEvent(EVENT_TYPES.ERROR, {
+        message: 'Failed to send typing indicator',
+        error
+      });
       return false;
     }
   }
@@ -336,7 +425,12 @@ class WebSocketService {
    */
   reset() {
     this.disconnect();
-    this.listeners = {};
+    
+    // Clear all event handlers
+    Object.values(EVENT_TYPES).forEach(eventType => {
+      this.eventRegistry[eventType] = [];
+    });
+    
     this.currentToken = null;
     this.reconnectAttempts = 0;
   }
@@ -344,5 +438,8 @@ class WebSocketService {
 
 // Create singleton instance
 const websocketService = new WebSocketService();
+
+// Export EVENT_TYPES for consumers to use
+export { EVENT_TYPES };
 
 export default websocketService; 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import websocketService from '../services/websocketService';
+import websocketService, { EVENT_TYPES } from '../services/websocketService';
 import messageService from '../services/messageService';
 import { getToken } from '../utils/tokenStorage';
 import { formatTimestamp, generateAvatarUrl } from '../utils/formatUtils';
@@ -316,29 +316,25 @@ export const ChatProvider = ({ children }) => {
       setError(`WebSocket error: ${data.message || 'Unknown error'}`);
     };
     
-    // Clear any existing listeners to prevent duplicates
-    const clearListeners = () => {
-      websocketService.removeEventListener('connect', handleConnect);
-      websocketService.removeEventListener('disconnect', handleDisconnect);
-      websocketService.removeEventListener('message', handleMessage);
-      websocketService.removeEventListener('typing', handleTyping);
-      websocketService.removeEventListener('error', handleError);
+    // Helper function to unsubscribe from events
+    const unsubscribeAll = (subscriptions) => {
+      subscriptions.forEach(unsubscribe => unsubscribe && unsubscribe());
     };
     
     if (isAuthenticated && currentToken && user?.id) {
       console.log('User is authenticated. Setting up WebSocket connection...');
-      // Clear any existing listeners first
-      clearListeners();
       
       // Disconnect any existing connection first
       websocketService.disconnect();
       
-      // Add event listeners
-      websocketService.addEventListener('connect', handleConnect);
-      websocketService.addEventListener('disconnect', handleDisconnect);
-      websocketService.addEventListener('message', handleMessage);
-      websocketService.addEventListener('typing', handleTyping);
-      websocketService.addEventListener('error', handleError);
+      // Register event handlers with the new system
+      const subscriptions = [
+        websocketService.on(EVENT_TYPES.CONNECT, handleConnect),
+        websocketService.on(EVENT_TYPES.DISCONNECT, handleDisconnect),
+        websocketService.on(EVENT_TYPES.MESSAGE, handleMessage),
+        websocketService.on(EVENT_TYPES.TYPING, handleTyping),
+        websocketService.on(EVENT_TYPES.ERROR, handleError)
+      ];
       
       // Connect to WebSocket with current token
       console.log('Connecting to WebSocket with token');
@@ -347,16 +343,13 @@ export const ChatProvider = ({ children }) => {
       // Clean up on unmount or when dependencies change
       return () => {
         console.log('Cleaning up WebSocket connections');
-        clearListeners();
+        unsubscribeAll(subscriptions);
       };
     } else if (!isAuthenticated) {
       console.log('User is not authenticated, disconnecting WebSocket');
       // Ensure WebSocket is disconnected when not authenticated
       websocketService.disconnect();
       setIsConnected(false);
-      
-      // Clear any existing listeners
-      clearListeners();
     }
   }, [isAuthenticated, user?.id, fetchConversations, updateConversationWithMessage]);
   
