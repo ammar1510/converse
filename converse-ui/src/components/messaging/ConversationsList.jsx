@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { generateAvatarUrl } from '../../utils/formatUtils';
 
 const ConversationsList = ({ conversations, onSelectConversation }) => {
   const [activeConversation, setActiveConversation] = useState(null);
@@ -25,7 +26,10 @@ const ConversationsList = ({ conversations, onSelectConversation }) => {
           >
             {convo.contact && (
               <div className="conversation-avatar">
-                <img src={convo.contact.avatar} alt={convo.contact.name} />
+                <img 
+                  src={convo.contact.avatar || generateAvatarUrl(convo.contact.name)} 
+                  alt={convo.contact.name} 
+                />
               </div>
             )}
             <div className="conversation-content">

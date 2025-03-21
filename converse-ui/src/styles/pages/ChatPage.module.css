@@ -1,0 +1,104 @@
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+  width: 100%;
+  overflow: hidden;
+}
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.chat-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-header h2 {
+  color: var(--green-primary);
+  margin: 0;
+}
+
+.welcome-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.welcome-message h2 {
+  color: var(--green-primary);
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.username-highlight {
+  background: var(--chat-gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+  display: inline-block;
+  padding-right: 5px;
+}
+
+.username-highlight::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  background: var(--chat-gradient-1);
+  opacity: 0.3;
+  z-index: -1;
+}
+
+.wave-emoji {
+  font-size: 1.5rem;
+  margin-left: 5px;
+  display: inline-block;
+  animation: wave 1.5s infinite;
+  transform-origin: 70% 70%;
+}
+
+@keyframes wave {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(16deg); }
+  20% { transform: rotate(-6deg); }
+  30% { transform: rotate(16deg); }
+  40% { transform: rotate(-4deg); }
+  50% { transform: rotate(16deg); }
+  60% { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.chat-placeholder {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray-color);
+  font-size: 1.1rem;
+  max-width: 500px;
+  margin: 0 auto;
+  margin-top: 2rem;
+  background-color: #f8f9fa;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.chat-placeholder ul {
+  text-align: left;
+  margin-top: 1rem;
+} 

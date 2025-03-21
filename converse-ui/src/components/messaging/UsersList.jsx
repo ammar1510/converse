@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { generateAvatarUrl } from '../../utils/formatUtils';
 
 const UsersList = ({ users, onSelectUser }) => {
   const [activeUser, setActiveUser] = useState(null);
@@ -23,7 +24,7 @@ const UsersList = ({ users, onSelectUser }) => {
             >
               <div className="user-avatar">
                 <img 
-                  src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.username}&background=4ead7c&color=fff&rounded=true&size=128`} 
+                  src={user.avatar_url || generateAvatarUrl(user.username)} 
                   alt={user.username} 
                 />
                 <span className="online-indicator"></span>

@@ -1,0 +1,6 @@
+/* Base Styles */
+@import './base/variables.css';
+@import './base/reset.css';
+
+/* Add custom font imports if needed */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Quicksand:wght@400;500;600;700&family=Comfortaa:wght@400;500;600;700&display=swap'); 

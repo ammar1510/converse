@@ -5,6 +5,7 @@ import ConversationsList from './ConversationsList';
 import UsersList from './UsersList';
 import ChatWindow from './ChatWindow';
 import MessageInput from './MessageInput';
+import { formatTimestamp, generateAvatarUrl } from '../../utils/formatUtils';
 
 const Messaging = () => {
   const { user } = useAuth();
@@ -82,7 +83,7 @@ const Messaging = () => {
         id: selectedUser.id,
         name: selectedUser.display_name || selectedUser.username,
         status: 'Online', // Default status
-        avatar: selectedUser.avatar_url || `https://ui-avatars.com/api/?name=${selectedUser.username}&background=4ead7c&color=fff&rounded=true&size=128`
+        avatar: selectedUser.avatar_url || generateAvatarUrl(selectedUser.username)
       }
     };
     
@@ -116,7 +117,7 @@ const Messaging = () => {
     
     // Format timestamp
     const timestamp = lastMsg.created_at 
-      ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ? formatTimestamp(lastMsg.created_at)
       : '';
     
     // Find the user in the users array
@@ -127,7 +128,7 @@ const Messaging = () => {
       id: convo.id,
       name: contactUser ? (contactUser.display_name || contactUser.username) : 'Unknown User',
       status: 'Online', // This should be replaced with actual status
-      avatar: contactUser?.avatar_url || `https://ui-avatars.com/api/?name=${convo.id}&background=4ead7c&color=fff&rounded=true&size=128`
+      avatar: contactUser?.avatar_url || generateAvatarUrl(contactUser?.username || convo.id)
     };
     
     return {
@@ -186,7 +187,7 @@ const Messaging = () => {
                 {selectedConversation.contact && (
                   <>
                     <img 
-                      src={selectedConversation.contact.avatar || `https://ui-avatars.com/api/?name=User&background=4ead7c&color=fff&rounded=true&size=128`} 
+                      src={selectedConversation.contact.avatar || generateAvatarUrl('User')} 
                       alt={selectedConversation.contact.name || 'User'} 
                     />
                     <span className="online-indicator"></span>

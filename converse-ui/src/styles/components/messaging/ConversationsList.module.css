@@ -1,0 +1,113 @@
+.conversations-list {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.conversations-list h3 {
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  color: var(--dark-color);
+  font-size: 1.2rem;
+  font-weight: 700;
+  position: relative;
+  display: inline-block;
+}
+
+.conversations-list h3:after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50px;
+  height: 3px;
+  background-color: var(--green-primary);
+  border-radius: 3px;
+}
+
+.conversations-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 5px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  background-color: #fff;
+}
+
+.conversation-item:hover, .conversation-item.active {
+  background-color: rgba(44, 122, 81, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.conversation-item:before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  background-color: var(--green-primary);
+  border-radius: 0 3px 3px 0;
+  transition: height 0.2s ease;
+}
+
+.conversation-item:hover:before, .conversation-item.active:before {
+  height: 70%;
+}
+
+.conversation-avatar {
+  position: relative;
+}
+
+.conversation-avatar img {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--green-light);
+}
+
+.conversation-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.conversation-title {
+  font-weight: 600;
+  margin-bottom: 3px;
+  color: var(--dark-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.95rem;
+}
+
+.conversation-preview {
+  color: var(--gray-color);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.conversation-time {
+  color: var(--gray-color);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  margin-left: auto;
+  align-self: flex-start;
+} 

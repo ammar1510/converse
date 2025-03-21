@@ -1,0 +1,128 @@
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 60px);
+  padding: 2rem;
+  background-color: #f5f8fa;
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 450px;
+}
+
+.auth-form-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 2.5rem;
+  border-radius: 20px;
+  border: 2px solid var(--green-primary);
+  box-shadow: 5px 5px 0px 2px var(--green-light);
+  transition: all 0.3s ease;
+}
+
+.auth-form-container h2 {
+  color: var(--green-primary);
+  font-weight: 800;
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.auth-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--green-primary);
+}
+
+.form-group input {
+  padding: 12px 15px;
+  border: 2px solid var(--green-primary);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: 3px 3px 0px 1px var(--green-light);
+  background-color: #f9fffc;
+}
+
+.form-group input:focus {
+  outline: none;
+  transform: translateY(2px);
+  box-shadow: 1px 1px 0px 0px var(--green-light);
+}
+
+.auth-button {
+  margin-top: 1rem;
+  padding: 14px;
+  background-color: var(--green-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 3px 3px 0px 1px var(--green-light);
+}
+
+.auth-button:hover {
+  background-color: #236341;
+}
+
+.auth-button:disabled {
+  background-color: #a0c9b6;
+  cursor: not-allowed;
+}
+
+.auth-error {
+  width: 100%;
+  padding: 0.8rem;
+  margin-bottom: 1.2rem;
+  background-color: #ffebee;
+  border-left: 4px solid #e57373;
+  color: #d32f2f;
+  border-radius: 4px;
+}
+
+.auth-success {
+  width: 100%;
+  padding: 0.8rem;
+  margin-bottom: 1.2rem;
+  background-color: #e8f5e9;
+  border-left: 4px solid #81c784;
+  color: #2e7d32;
+  border-radius: 4px;
+}
+
+.auth-links {
+  margin-top: 1.5rem;
+  text-align: center;
+  width: 100%;
+}
+
+.auth-links a {
+  color: var(--green-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  color: var(--green-light);
+} 
