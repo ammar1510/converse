@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { formatTimestamp } from '../../utils/formatUtils';
 
 const ChatWindow = ({ messages, currentUser }) => {
   const messagesEndRef = useRef(null);
@@ -9,20 +10,6 @@ const ChatWindow = ({ messages, currentUser }) => {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
-  
-  // Format timestamp from ISO string
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return '';
-    
-    try {
-      return new Date(timestamp).toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
-    } catch (error) {
-      return timestamp;
-    }
-  };
 
   return (
     <div className="chat-window">

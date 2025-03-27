@@ -10,86 +10,27 @@ const Messaging = () => {
   const { user } = useAuth();
   const { 
     conversations, 
-    messages, 
+    messages,
     users,
     loading, 
     error,
     isUserTyping,
     isConnected,
-    fetchConversations, 
-    fetchConversation,
-    fetchUsers,
+    selectedConversation,
+    currentMessages,
+    handleSelectConversation,
+    handleSelectUser,
+    formatConversations,
     sendMessage,
-    sendTyping
+    handleTypingIndicator
   } = useChat();
   
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [currentMessages, setCurrentMessages] = useState([]);
   const [activeTab, setActiveTab] = useState('conversations'); // 'conversations' or 'users'
   
-  // Fetch conversations and users on component mount
-  useEffect(() => {
-    fetchConversations();
-    fetchUsers();
-  }, [fetchConversations, fetchUsers]);
+  // Check if the selected contact is typing
+  const isContactTyping = selectedConversation ? 
+    isUserTyping(selectedConversation.id) : false;
   
-  // Update selected conversation when conversations change
-  useEffect(() => {
-    if (!selectedConversation && conversations.length > 0) {
-      // Just select the first conversation if none is selected
-      setSelectedConversation(conversations[0]);
-    }
-  }, [conversations, selectedConversation]);
-  
-  // Update current messages when selected conversation changes
-  useEffect(() => {
-    if (selectedConversation) {
-      const conversationMessages = messages[selectedConversation.id] || [];
-      setCurrentMessages(conversationMessages);
-      
-      // Only fetch if no messages loaded
-      if (conversationMessages.length === 0) {
-        fetchConversation(selectedConversation.id);
-      }
-    }
-  }, [selectedConversation, messages, fetchConversation]);
-
-  // Periodic refresh of current conversation
-  useEffect(() => {
-    if (!selectedConversation) return;
-    
-    const refreshInterval = setInterval(() => {
-      fetchConversation(selectedConversation.id).catch(() => {
-        // Silently handle errors during background refresh
-      });
-    }, 15000); // Reduced frequency
-    
-    return () => clearInterval(refreshInterval);
-  }, [selectedConversation, fetchConversation]);
-
-  const handleSelectConversation = (conversation) => {
-    setSelectedConversation(conversation);
-  };
-
-  const handleSelectUser = (selectedUser) => {
-    // Create a conversation object from the selected user
-    const conversation = {
-      id: selectedUser.id,
-      title: `Conversation with ${selectedUser.display_name || selectedUser.username}`,
-      lastMessage: 'Start a new conversation',
-      timestamp: '',
-      contact: {
-        id: selectedUser.id,
-        name: selectedUser.display_name || selectedUser.username,
-        status: 'Online', // Default status
-        avatar: selectedUser.avatar_url || `https://ui-avatars.com/api/?name=${selectedUser.username}&background=4ead7c&color=fff&rounded=true&size=128`
-      }
-    };
-    
-    handleSelectConversation(conversation);
-    setActiveTab('conversations');
-  };
-
   const handleSendMessage = async (text) => {
     if (!selectedConversation) return;
     
@@ -102,42 +43,17 @@ const Messaging = () => {
   
   const handleTyping = (isTyping) => {
     if (!selectedConversation) return;
-    sendTyping(selectedConversation.id, isTyping);
+    handleTypingIndicator(selectedConversation.id, isTyping);
   };
   
-  // Check if the selected contact is typing
-  const isContactTyping = selectedConversation ? 
-    isUserTyping(selectedConversation.id) : false;
+  // Wrapper for handleSelectUser to also switch to conversations tab
+  const handleSelectUserAndSwitchTab = (user) => {
+    handleSelectUser(user);
+    setActiveTab('conversations');
+  };
   
-  // Format conversations for display
-  const formattedConversations = conversations.map(convo => {
-    // Get the last message
-    const lastMsg = convo.lastMessage || {};
-    
-    // Format timestamp
-    const timestamp = lastMsg.created_at 
-      ? new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : '';
-    
-    // Find the user in the users array
-    const contactUser = users.find(u => u.id === convo.id);
-    
-    // Get contact info from sender or receiver
-    const contact = {
-      id: convo.id,
-      name: contactUser ? (contactUser.display_name || contactUser.username) : 'Unknown User',
-      status: 'Online', // This should be replaced with actual status
-      avatar: contactUser?.avatar_url || `https://ui-avatars.com/api/?name=${convo.id}&background=4ead7c&color=fff&rounded=true&size=128`
-    };
-    
-    return {
-      id: convo.id,
-      title: `Conversation with ${contact.name}`,
-      lastMessage: lastMsg.content || 'No messages yet',
-      timestamp,
-      contact
-    };
-  });
+  // Get formatted conversations from context
+  const formattedConversations = formatConversations();
 
   return (
     <div className="messaging-container">
@@ -174,7 +90,7 @@ const Messaging = () => {
         ) : (
           <UsersList
             users={users}
-            onSelectUser={handleSelectUser}
+            onSelectUser={handleSelectUserAndSwitchTab}
           />
         )}
       </div>
@@ -186,7 +102,7 @@ const Messaging = () => {
                 {selectedConversation.contact && (
                   <>
                     <img 
-                      src={selectedConversation.contact.avatar || `https://ui-avatars.com/api/?name=User&background=4ead7c&color=fff&rounded=true&size=128`} 
+                      src={selectedConversation.contact.avatar} 
                       alt={selectedConversation.contact.name || 'User'} 
                     />
                     <span className="online-indicator"></span>

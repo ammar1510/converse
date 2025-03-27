@@ -2,6 +2,7 @@ import { createContext, useState, useEffect, useContext } from 'react';
 import { isTokenValid, getUserData, clearAuthData } from '../utils/tokenStorage';
 import * as authService from '../services/authService';
 import websocketService from '../services/websocketService';
+import messageService from '../services/messageService';
 
 // Create context
 const AuthContext = createContext(null);
@@ -104,18 +105,28 @@ export const AuthProvider = ({ children }) => {
   /**
    * Logout the current user
    */
-  const logout = () => {
-    // Reset WebSocket connection state before clearing auth data
-    websocketService.reset();
-    
-    // Perform logout
-    authService.logout();
-    
-    // Update state after logout
-    setUser(null);
-    setIsAuthenticated(false);
-    
-    console.log('User logged out, WebSocket reset, auth data cleared');
+  const logout = async () => {
+    try {
+      // Reset WebSocket connection state before clearing auth data
+      websocketService.reset();
+      
+      // Clear cached API data
+      messageService.invalidateCache();
+      
+      // Perform logout
+      authService.logout();
+      
+      // Update state after logout
+      setUser(null);
+      setIsAuthenticated(false);
+      
+      console.log('User logged out, WebSocket reset, auth data cleared, cache invalidated');
+    } catch (err) {
+      console.error('Error during logout:', err);
+      setError('Logout failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Context value

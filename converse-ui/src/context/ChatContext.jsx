@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
-import websocketService from '../services/websocketService';
+import websocketService, { EVENT_TYPES } from '../services/websocketService';
 import messageService from '../services/messageService';
 import { getToken } from '../utils/tokenStorage';
+import { formatTimestamp, generateAvatarUrl, registerEventHandlers } from '../utils/utils';
 
 // Create context
 const ChatContext = createContext();
@@ -19,9 +20,51 @@ export const ChatProvider = ({ children }) => {
   const [typingUsers, setTypingUsers] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [currentMessages, setCurrentMessages] = useState([]);
+  
+  // Define a typingTimeouts ref at the component top level
+  const typingTimeoutsRef = useRef({});
   
   // Get token directly from storage to ensure it's always current
   const token = getToken();
+
+  /**
+   * Format conversations for display
+   * @returns {array} Formatted conversations
+   */
+  const formatConversations = useCallback(() => {
+    if (!user?.id) return [];
+    
+    return conversations.map(convo => {
+      // Get the last message
+      const lastMsg = convo.lastMessage || {};
+      
+      // Format timestamp
+      const timestamp = lastMsg.created_at 
+        ? formatTimestamp(lastMsg.created_at)
+        : '';
+      
+      // Find the user in the users array
+      const contactUser = users.find(u => u.id === convo.id);
+      
+      // Get contact info from sender or receiver
+      const contact = {
+        id: convo.id,
+        name: contactUser ? (contactUser.display_name || contactUser.username) : 'Unknown User',
+        status: 'Online', // This should be replaced with actual status
+        avatar: contactUser?.avatar_url || generateAvatarUrl(contactUser?.username || convo.id)
+      };
+      
+      return {
+        id: convo.id,
+        title: `Conversation with ${contact.name}`,
+        lastMessage: lastMsg.content || 'No messages yet',
+        timestamp,
+        contact
+      };
+    });
+  }, [conversations, users, user?.id]);
 
   /**
    * Update conversations list with a new message
@@ -99,7 +142,121 @@ export const ChatProvider = ({ children }) => {
     }
   }, [user?.id]);
 
-  // Connect to WebSocket when authenticated
+  /**
+   * Fetch messages for a specific conversation
+   * @param {string} userId - UUID of the other user in the conversation
+   */
+  const fetchConversation = useCallback(async (userId) => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const conversationData = await messageService.getConversation(userId);
+      
+      // Sort messages by timestamp (oldest first)
+      const sortedConversationData = [...conversationData].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+      
+      setMessages(prev => ({
+        ...prev,
+        [userId]: sortedConversationData
+      }));
+      
+      // Mark unread messages as read
+      const unreadMessages = conversationData.filter(
+        msg => !msg.is_read && msg.sender_id === userId
+      );
+      
+      for (const msg of unreadMessages) {
+        await messageService.markAsRead(msg.id);
+      }
+      
+      return conversationData;
+    } catch (err) {
+      console.error(`Error fetching conversation with ${userId}:`, err);
+      setError('Failed to load conversation');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  /**
+   * Handle selecting a conversation
+   * @param {object} conversation - The conversation to select
+   */
+  const handleSelectConversation = useCallback((conversation) => {
+    setSelectedConversation(conversation);
+    
+    if (conversation) {
+      const conversationMessages = messages[conversation.id] || [];
+      setCurrentMessages(conversationMessages);
+      
+      // Only fetch if no messages loaded
+      if (conversationMessages.length === 0) {
+        fetchConversation(conversation.id);
+      }
+    }
+  }, [messages, fetchConversation]);
+
+  /**
+   * Handle selecting a user to start or continue a conversation
+   * @param {object} selectedUser - The user to start/continue conversation with
+   */
+  const handleSelectUser = useCallback((selectedUser) => {
+    // Create a conversation object from the selected user
+    const conversation = {
+      id: selectedUser.id,
+      title: `Conversation with ${selectedUser.display_name || selectedUser.username}`,
+      lastMessage: 'Start a new conversation',
+      timestamp: '',
+      contact: {
+        id: selectedUser.id,
+        name: selectedUser.display_name || selectedUser.username,
+        status: 'Online', // Default status
+        avatar: selectedUser.avatar_url || generateAvatarUrl(selectedUser.username)
+      }
+    };
+    
+    handleSelectConversation(conversation);
+  }, [handleSelectConversation]);
+  
+  // Update selected conversation when conversations change
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      // Format the first conversation and select it if none is selected
+      const formattedConversations = formatConversations();
+      if (formattedConversations.length > 0) {
+        setSelectedConversation(formattedConversations[0]);
+      }
+    }
+  }, [conversations, selectedConversation, formatConversations]);
+  
+  // Update current messages when selected conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      const conversationMessages = messages[selectedConversation.id] || [];
+      setCurrentMessages(conversationMessages);
+    }
+  }, [selectedConversation, messages]);
+
+  // Periodic refresh of current conversation
+  useEffect(() => {
+    if (!selectedConversation) return;
+    
+    const refreshInterval = setInterval(() => {
+      fetchConversation(selectedConversation.id).catch(() => {
+        // Silently handle errors during background refresh
+      });
+    }, 15000); // Reduced frequency
+    
+    return () => clearInterval(refreshInterval);
+  }, [selectedConversation, fetchConversation]);
+  
+  // Setup WebSocket event listeners
   useEffect(() => {
     // Always get the latest token from storage
     const currentToken = getToken();
@@ -162,91 +319,34 @@ export const ChatProvider = ({ children }) => {
       setError(`WebSocket error: ${data.message || 'Unknown error'}`);
     };
     
-    // Clear any existing listeners to prevent duplicates
-    const clearListeners = () => {
-      websocketService.removeEventListener('connect', handleConnect);
-      websocketService.removeEventListener('disconnect', handleDisconnect);
-      websocketService.removeEventListener('message', handleMessage);
-      websocketService.removeEventListener('typing', handleTyping);
-      websocketService.removeEventListener('error', handleError);
-    };
-    
     if (isAuthenticated && currentToken && user?.id) {
       console.log('User is authenticated. Setting up WebSocket connection...');
-      // Clear any existing listeners first
-      clearListeners();
       
       // Disconnect any existing connection first
       websocketService.disconnect();
       
-      // Add event listeners
-      websocketService.addEventListener('connect', handleConnect);
-      websocketService.addEventListener('disconnect', handleDisconnect);
-      websocketService.addEventListener('message', handleMessage);
-      websocketService.addEventListener('typing', handleTyping);
-      websocketService.addEventListener('error', handleError);
+      // Register event handlers using the utility function
+      const cleanup = registerEventHandlers(websocketService, {
+        [EVENT_TYPES.CONNECT]: handleConnect,
+        [EVENT_TYPES.DISCONNECT]: handleDisconnect,
+        [EVENT_TYPES.MESSAGE]: handleMessage,
+        [EVENT_TYPES.TYPING]: handleTyping,
+        [EVENT_TYPES.ERROR]: handleError
+      });
       
       // Connect to WebSocket with current token
       console.log('Connecting to WebSocket with token');
       websocketService.connect(currentToken);
       
       // Clean up on unmount or when dependencies change
-      return () => {
-        console.log('Cleaning up WebSocket connections');
-        clearListeners();
-      };
+      return cleanup;
     } else if (!isAuthenticated) {
       console.log('User is not authenticated, disconnecting WebSocket');
       // Ensure WebSocket is disconnected when not authenticated
       websocketService.disconnect();
       setIsConnected(false);
-      
-      // Clear any existing listeners
-      clearListeners();
     }
   }, [isAuthenticated, user?.id, fetchConversations, updateConversationWithMessage]);
-  
-  /**
-   * Fetch messages for a specific conversation
-   * @param {string} userId - UUID of the other user in the conversation
-   */
-  const fetchConversation = useCallback(async (userId) => {
-    if (!user?.id) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const conversationData = await messageService.getConversation(userId);
-      
-      // Sort messages by timestamp (oldest first)
-      const sortedConversationData = [...conversationData].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      );
-      
-      setMessages(prev => ({
-        ...prev,
-        [userId]: sortedConversationData
-      }));
-      
-      // Mark unread messages as read
-      const unreadMessages = conversationData.filter(
-        msg => !msg.is_read && msg.sender_id === userId
-      );
-      
-      for (const msg of unreadMessages) {
-        await messageService.markAsRead(msg.id);
-      }
-      
-      return conversationData;
-    } catch (err) {
-      console.error(`Error fetching conversation with ${userId}:`, err);
-      setError('Failed to load conversation');
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
   
   /**
    * Send a message to another user
@@ -336,6 +436,36 @@ export const ChatProvider = ({ children }) => {
     }
   }, [isAuthenticated, fetchUsers]);
   
+  // Add new utility function for managing typing indicators with timeouts
+  const handleTypingIndicator = useCallback((conversationId, isTyping) => {
+    if (!conversationId) return;
+    
+    if (isTyping) {
+      // Send typing indicator
+      sendTyping(conversationId, true);
+      
+      // Clear any existing timeout for this user
+      if (typingTimeoutsRef.current[conversationId]) {
+        clearTimeout(typingTimeoutsRef.current[conversationId]);
+      }
+      
+      // Set timeout to automatically clear typing indicator after inactivity
+      typingTimeoutsRef.current[conversationId] = setTimeout(() => {
+        sendTyping(conversationId, false);
+        delete typingTimeoutsRef.current[conversationId];
+      }, 3000); // 3 seconds of inactivity
+    } else {
+      // Turn off typing indicator
+      sendTyping(conversationId, false);
+      
+      // Clear any existing timeout
+      if (typingTimeoutsRef.current[conversationId]) {
+        clearTimeout(typingTimeoutsRef.current[conversationId]);
+        delete typingTimeoutsRef.current[conversationId];
+      }
+    }
+  }, [sendTyping]);
+  
   // Context value
   const value = {
     isConnected,
@@ -350,7 +480,13 @@ export const ChatProvider = ({ children }) => {
     fetchUsers,
     sendMessage,
     sendTyping,
-    isUserTyping
+    isUserTyping,
+    selectedConversation,
+    currentMessages,
+    handleSelectConversation,
+    handleSelectUser,
+    formatConversations,
+    handleTypingIndicator
   };
   
   return (
