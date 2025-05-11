@@ -120,8 +120,8 @@ WebSockets are used for all real-time communications:
 - Receiving/sending messages
 - User presence updates
 - Channel join/leave notifications
-- Typing indicators (if implemented)
-- Read receipts (if implemented)
+- Typing indicators 
+- Read receipts 
 
 REST API is used for:
 - Authentication
