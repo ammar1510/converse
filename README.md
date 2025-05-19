@@ -90,7 +90,7 @@ sequenceDiagram
     DB-->>RA: User Data
     RA-->>AC: JWT Token
     AC-->>FC: Update Authentication State
-    Note over FC, AC, RA, DB: Token stored in localStorage
+    Note over FC,AC,RA,DB: Token stored in localStorage
 ```
 
 ### Messaging Flow
@@ -138,7 +138,7 @@ graph TD
     end
 
     subgraph Backend
-        HWS[HandleWebSocket()] --> WSM[WebSocket Manager]
+        HWS["HandleWebSocket()"] --> WSM[WebSocket Manager]
         WSM --> ClientStruct[Client Struct]
     end
 
