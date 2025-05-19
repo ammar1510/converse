@@ -90,7 +90,7 @@ sequenceDiagram
     DB-->>RA: User Data
     RA-->>AC: JWT Token
     AC-->>FC: Update Authentication State
-    Note over FC,AC,RA,DB: Token stored in localStorage
+    Note right of AC: Token stored in localStorage
 ```
 
 ### Messaging Flow
