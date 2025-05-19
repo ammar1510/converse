@@ -1,191 +1,238 @@
-# Converse - Real-Time Chat Application
+# System Architecture
+Converse follows a client-server architecture with real-time communication capabilities through WebSockets. The system consists of two primary components:
 
-A high-performance real-time chat service built with Go and React, designed for direct messaging between users.
+*   **React Frontend**: Handles user interface, state management, and client-side WebSocket connections
+*   **Go Backend**: Provides API endpoints, handles authentication, processes messages, and manages WebSocket connections
 
-## Project Overview
+```mermaid
+graph TD
+    subgraph Client Browser
+        A[Converse UI Frontend]
+        B[WebSocket Client]
+    end
 
-This project is a scalable WebSocket-based chat application with features similar to modern messaging platforms. It demonstrates proficiency in Go backend development, React frontend development, handling concurrent connections, real-time data processing, and state management.
+    subgraph Server
+        C[Go Backend API]
+        D[WebSocket Server]
+        E[Database]
+    end
 
-## Architecture
-
-```
-┌─────────────┐     ┌───────────────────────┐      ┌────────────────┐
-│ React       │◄────┤ Go Chat Service       │◄─────┤PostgreSQL      │
-│ Frontend    │     │ (WebSockets + REST API)│      │(User/Message DB)│
-└─────────────┘     └───────────────────────┘      └────────────────┘
-```
-
-### Core Components
-
-1. **Go Backend**: 
-   - REST API for authentication and data retrieval
-   - WebSocket server for real-time communication
-   - JWT-based authentication
-
-2. **React Frontend**:
-   - Modern UI with components for chats and messages
-   - Real-time updates via WebSocket
-   - Context API for state management
-
-3. **PostgreSQL Database**:
-   - User management
-   - Message persistence
-   - Conversation tracking
-
-## Authentication Flow
-
-```
-1. Registration: User → POST /api/auth/register → Store in PostgreSQL
-2. Login: User → POST /api/auth/login → Verify credentials → Return JWT
-3. JWT Storage: Client stores token in localStorage
-4. Authenticated Requests: Include JWT in Authorization header
-5. WebSocket Auth: Establish connection with JWT via URL parameter
+    A --- C
+    A --> B
+    B --- D
+    C --- E
+    D --- E
 ```
 
-## Database Schema
+## Core Components
+The system is composed of several interconnected components that handle different aspects of the application functionality:
 
-```sql
--- Users table
-CREATE TABLE users (
-    id UUID PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    display_name VARCHAR(255),
-    avatar_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    last_seen TIMESTAMP WITH TIME ZONE NOT NULL
-);
+### Frontend Components
+*   **Authentication Context**: Manages user authentication state and tokens
+*   **Chat Context**: Central state management for all chat-related functionality
+*   **Messaging Components**: UI components for rendering conversations and messages
+*   **WebSocket Service**: Handles real-time communication with the server
 
--- Direct messages table
-CREATE TABLE messages (
-    id UUID PRIMARY KEY,
-    sender_id UUID NOT NULL REFERENCES users(id),
-    receiver_id UUID NOT NULL REFERENCES users(id),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    is_read BOOLEAN DEFAULT FALSE,
-    updated_at TIMESTAMP WITH TIME ZONE
-);
+### Backend Components
+*   **Authentication System**: Handles user registration, login, and JWT token management
+*   **Message Handlers**: Processes message creation, retrieval, and storage
+*   **WebSocket Manager**: Manages WebSocket connections and real-time message broadcasting
+
+```mermaid
+graph TD
+    subgraph Frontend Components
+        FC_AuthContext[AuthContext]
+        FC_ChatContext[ChatContext]
+        FC_MessagingComponents[Messaging Components]
+        FC_APIServices[API Services]
+        FC_WebSocketService[WebSocket Service]
+    end
+
+    subgraph Backend Components
+        BC_AuthHandlers[Authentication Handlers]
+        BC_AuthMiddleware[Auth Middleware]
+        BC_MessageHandlers[Message Handlers]
+        BC_WebSocketManager[WebSocket Manager]
+        BC_DatabaseLayer[Database Layer]
+    end
+
+    FC_AuthContext --> FC_APIServices
+    FC_ChatContext --> FC_MessagingComponents
+    FC_ChatContext --> FC_APIServices
+    FC_ChatContext --> FC_WebSocketService
+
+    FC_APIServices --> BC_AuthHandlers
+    FC_APIServices --> BC_MessageHandlers
+    FC_WebSocketService --> BC_WebSocketManager
+
+    BC_AuthHandlers --> BC_AuthMiddleware
+    BC_MessageHandlers --> BC_DatabaseLayer
+    BC_WebSocketManager --> BC_DatabaseLayer
 ```
 
-## Features
+## Client-Server Communication
+Converse utilizes two primary communication channels between client and server:
 
-### Core Features
+*   **REST API**: For authentication and data retrieval operations
+*   **WebSockets**: For real-time messaging and notifications
 
-- **User Management**
-  - Registration and authentication
-  - User profiles
-  - Online/offline status
+### Authentication Flow
+```mermaid
+sequenceDiagram
+    participant FC as Frontend Client
+    participant AC as AuthContext
+    participant RA as REST API
+    participant DB as Database
 
-- **Real-Time Messaging**
-  - Direct messaging between users
-  - Read receipts
-  - Message history
-
-## API Endpoints
-
-### User Management
-- `POST /api/auth/register` - Create a new user account
-- `POST /api/auth/login` - Authenticate and receive JWT token
-- `GET /api/auth/me` - Get current user profile
-- `GET /api/users` - List users
-
-### Message Management
-- `GET /api/messages` - Get all messages for the current user
-- `POST /api/messages` - Send a new message
-- `GET /api/messages/conversation/:userID` - Get conversation with specific user
-- `PUT /api/messages/:messageID/read` - Mark a message as read
-
-### WebSocket Interface
-- `WS /api/ws` - Main WebSocket endpoint (authenticated via token in URL)
-
-## Technology Stack
-
-### Backend
-- **Language**: Go (Golang)
-- **Framework**: Gin
-- **Database**: PostgreSQL
-- **WebSockets**: Gorilla WebSocket
-- **Authentication**: JWT tokens
-
-### Frontend
-- **Framework**: React
-- **State Management**: Context API
-- **Styling**: CSS/TailwindCSS
-- **HTTP Client**: Axios
-- **WebSockets**: Native WebSocket API
-
-## Project Structure
-
-### Backend
-```
-converse/
-├── cmd/
-│   └── server/                # Entry point
-│       └── main.go
-├── internal/
-│   ├── api/                   # REST API handlers
-│   │   ├── auth.go            # Auth endpoints
-│   │   ├── messages.go        # Message endpoints
-│   │   └── router.go          # Route configuration
-│   ├── auth/                  # Auth logic
-│   ├── database/              # DB interactions
-│   │   └── postgres.go
-│   ├── models/                # Data structures
-│   └── websocket/             # WebSocket handling
-├── pkg/                       # Shared utilities
-└── go.mod
+    FC->>AC: Login Request
+    AC->>RA: POST /api/auth/login
+    RA->>DB: Verify Credentials
+    DB-->>RA: User Data
+    RA-->>AC: JWT Token
+    AC-->>FC: Update Authentication State
+    Note right of AC: Token stored in localStorage
 ```
 
-### Frontend
-```
-converse-ui/
-├── src/
-│   ├── components/            # Reusable UI components
-│   ├── context/               # React Context providers
-│   ├── pages/                 # Page components
-│   ├── services/              # API service modules
-│   │   ├── api.js             # Axios instance
-│   │   ├── authService.js     # Authentication
-│   │   ├── messageService.js  # Message handling
-│   │   └── websocketService.js # WebSocket client
-│   ├── utils/                 # Utility functions
-│   └── App.jsx                # Main application component
-├── public/
-└── package.json
-```
+### Messaging Flow
+```mermaid
+sequenceDiagram
+    participant FC as Frontend Client
+    participant CC as ChatContext
+    participant RA as REST API
+    participant WS as WebSocket Service
+    participant DB as Database
 
-## WebSocket Protocol
+    FC->>RA: GET /api/messages
+    RA->>DB: Fetch Messages
+    DB-->>RA: Messages Data
+    RA-->>FC: Messages Response
 
-WebSocket connections are established at `/api/ws` with authentication via JWT token in the URL parameter.
-
-Message format example:
-```json
-{
-  "type": "message",
-  "sender_id": "user-uuid",
-  "receiver_id": "recipient-uuid",
-  "content": "Hello there!",
-  "timestamp": "2023-03-20T12:34:56Z"
-}
+    FC->>CC: Send Message
+    CC->>WS: WebSocket Message
+    WS->>DB: Store Message
+    WS-->>CC: Message Confirmation
+    WS-->>FC: Real-time Update to Recipients
 ```
 
-## Getting Started
+## WebSocket Implementation
+The WebSocket system is a critical component enabling real-time communication between users. It handles:
 
-### Backend Setup
-```bash
-# Run the server
-go run cmd/server/main.go
+*   Message delivery
+*   Typing indicators
+*   Online status updates
+
+The WebSocket Manager, a key part of the backend, is responsible for:
+*   Managing client connections
+*   Broadcasting messages to specific users
+*   Handling connection errors and reconnections
+
+```mermaid
+graph TD
+    subgraph Frontend
+        ChatContext --> WSService[WebSocket Service]
+    end
+
+    subgraph Message Types
+        MTM[MessageTypeMessage]
+        MTT[MessageTypeTyping]
+    end
+
+    subgraph Backend
+        HWS["HandleWebSocket()"] --> WSM[WebSocket Manager]
+        WSM --> ClientStruct[Client Struct]
+    end
+
+    WSService -- Sends/Receives --> MTM
+    WSService -- Sends/Receives --> MTT
+    WSService --- HWS
 ```
 
-### Frontend Setup
-```bash
-cd converse-ui
-npm install
-npm run dev
+## Application Structure
+
+### Frontend Structure
+The Converse UI is built with React and organized into the following main directories:
+
+| Directory   | Purpose                                        |
+|-------------|------------------------------------------------|
+| /components | Reusable UI components                         |
+| /context    | React context providers for state management   |
+| /pages      | Main application pages and routes              |
+| /services   | API and WebSocket service implementations      |
+| /routes     | Routing and protected route implementation     |
+
+The application uses React Context for state management, with two primary contexts:
+
+*   **AuthContext**: Manages authentication state
+*   **ChatContext**: Manages chat-related state
+
+```mermaid
+graph TD
+    subgraph Route Structure
+        AppComponent[App Component]
+        AppLayout[AppLayout Component]
+        RRR[React Router Routes]
+        PublicRoutes[Public Routes: /login, /register]
+        ProtectedRoutes[Protected Routes: /chat]
+    end
+
+    AuthProvider[AuthProvider]
+    ChatProvider[ChatProvider]
+    Navbar[Navbar Component]
+    ProtectedRouteComp[ProtectedRoute Component]
+    ChatPageComp[ChatPage Component]
+
+    AppComponent --> AppLayout
+    AppComponent --> AuthProvider
+    AppComponent --> ChatProvider
+
+    AppLayout --> RRR
+    AppLayout --> Navbar
+
+    RRR --> PublicRoutes
+    RRR --> ProtectedRoutes
+
+    ProtectedRoutes --> ProtectedRouteComp
+    ProtectedRouteComp --> ChatPageComp
 ```
 
-## License
+### Backend Structure
+The backend is written in Go and follows a modular architecture:
 
-MIT 
+| Directory         | Purpose                                  |
+|-------------------|------------------------------------------|
+| /internal         | Internal packages for the application    |
+| /internal/auth    | Authentication and JWT handling          |
+| /internal/handlers| HTTP API request handlers                |
+| /internal/models  | Data models and database interfaces      |
+| /internal/websocket| WebSocket implementation                 |
+
+## Configuration
+Converse uses environment variables for configuration, which are accessed through a central configuration file:
+
+| Setting        | Purpose                                           |
+|----------------|---------------------------------------------------|
+| API_URL        | Base URL for backend API requests                 |
+| WS_URL         | WebSocket server URL                              |
+| AUTH_TOKEN_KEY | Key for storing authentication token in localStorage |
+| USER_DATA_KEY  | Key for storing user data in localStorage         |
+
+## User Interface
+The Converse UI features a modern chat interface with the following key components:
+
+*   Navigation bar with authentication controls
+*   Sidebar displaying conversations and users
+*   Chat window showing messages
+*   Message input with typing indicators
+
+The interface is built with a mobile-responsive design and themed with a green-blue color scheme.
+
+## Summary
+Converse is a full-featured chat application that demonstrates a modern web architecture with:
+
+*   Separation of concerns between frontend and backend
+*   Real-time communication via WebSockets
+*   Stateful frontend with React Context
+*   Secure authentication with JWT
+*   Modular and testable components
+
+This overview was generated using DeepWiki.
